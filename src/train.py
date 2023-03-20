@@ -1,12 +1,14 @@
 import tools
 import models
 import torch
-from torch.utils.data import RandomSampler
+import random
+import render
 
 
 def train_nerf(datadir, dataconfig, gpu=True):
     print(f"use GPU : {gpu}")
-    datasets, (H, W, focal), render_poses = tools.read_datasets(datadir, dataconfig)
+    datasets, (H, W, focal), render_poses = tools.read_datasets(datadir, 
+                                                                dataconfig)
     print(f"images shape : {H, W}")
 
     '''
@@ -31,21 +33,43 @@ def train_nerf(datadir, dataconfig, gpu=True):
     coord_input_dim = coordinate_embeddings.count_dim()
     direct_input_dim = direction_embeddings.count_dim()
 
-    coarse_model = models.nerf(coord_input_dim, direct_input_dim, coordinate_embeddings, direction_embeddings)
-    find_model = models.nerf(coord_input_dim, direct_input_dim, coordinate_embeddings, direction_embeddings)
+    coarse_model = models.nerf(coord_input_dim, direct_input_dim, 
+                               coordinate_embeddings, direction_embeddings)
+    find_model = models.nerf(coord_input_dim, direct_input_dim, 
+                             coordinate_embeddings, direction_embeddings)
     
-    train_images = train_data["images"]
-    train_poses = train_data["poses"]
-    print(train_images[1][400, 400])
+    train_images = torch.from_numpy(train_data["images"])
+    train_poses = torch.from_numpy(train_data["poses"])
     N_images, Height, Weight, channal = train_images.shape
+    K = torch.tensor([
+                    [focal, 0, 0.5*W],
+                    [0, focal, 0.5*H],
+                    [0, 0, 1]
+                    ])
+    
+    if gpu:
+        train_images = train_images.cuda()
+        train_poses = train_poses.cuda()
+        K = K.cuda()
+
+        coarse_model = coarse_model.cuda()
+        find_model = find_model.cuda()
+
     for i in range(epochs):
         # 一张图片一张图片训练
-        train_images = train_images[torch.randperm(N_images)]
-        print(train_images[1][400, 400])
-        import sys
-        sys.exit()
-        train_poses = train_poses[torch.randperm(N_images)]
+        index_image = random.sample(range(N_images), 1)
+        train_image = train_images[index_image]
+        train_pose = train_poses[index_image]
+
+        render.get_rays(H, W, K, train_pose)
+        grid_W, grid_H = torch.meshgrid(torch.arange(W), torch.arange(H))
+        grid = torch.stack((grid_H, grid_W), dim=-1).transpose(1, 0)
+        grid = grid.reshape((-1, 2))
+        select_indexs = random.sample(grid.shape[0], N_rays)
+        select_coords = grid[select_indexs].long()
         
+        
+
 
 
     
