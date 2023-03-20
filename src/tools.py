@@ -44,7 +44,7 @@ def gpu_run_environment(gpu=True):
         return False
     elif gpu and torch.cuda.is_available():
         return True
-    
+
 
 def read_datasets(datadir, dataconfig):
     splits = ['train', 'validate', 'test']
@@ -70,4 +70,4 @@ def read_datasets(datadir, dataconfig):
     focal = (W * 0.5) / np.tan(camera_angle_X * 0.5)
     render_poses = torch.stack([pose_spherical(angle, -30.0, 4.0) for angle in np.linspace(-180, 180, 40 + 1)[:-1]], 0)
 
-    return return_datasets, poses, (H, W, focal), render_poses
+    return return_datasets, (H, W, focal), render_poses

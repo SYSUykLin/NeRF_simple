@@ -1,8 +1,11 @@
 import tools
 import train
+import torch
+import models
 
 
 if __name__ == '__main__':
+
     # 设置默认数据格式
     tools.set_default_datatype()
     is_gpu = tools.gpu_run_environment()
@@ -12,3 +15,4 @@ if __name__ == '__main__':
     train.train_nerf(datadir=datadir,
                      dataconfig=data_config, 
                      gpu=is_gpu)
+    
