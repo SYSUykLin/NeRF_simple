@@ -31,7 +31,7 @@ class nerf(nn.Module):
             self.second_model.append(nn.Linear(self.hidden_size, self.hidden_size))
         
         self.sigma_model = nn.Linear(self.hidden_size, 1)
-        self.feature_model = nn.Linear(self.hidden_size)
+        self.feature_model = nn.Linear(self.hidden_size, self.hidden_size)
         self.feature_direct_model = nn.Linear(self.hidden_size + self.direction_input_dim, self.hidden_size // 2)
         self.color_model = nn.Linear(self.hidden_size // 2, 3)
     
