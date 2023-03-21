@@ -52,7 +52,6 @@ def train_nerf(datadir, dataconfig, gpu=True):
     
     if gpu:
         K = K.cuda()
-
         coarse_model = coarse_model.cuda()
         find_model = find_model.cuda()
 

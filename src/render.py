@@ -43,7 +43,7 @@ def find_samples():
 
 def render_rays(z_vals, model, rays_d, rays_o, gpu=True):
     device = 'cuda' if gpu else "cpu"
-    z_vals = z_vals.to('cuda')
+    z_vals = z_vals.cuda()
     coordinates = rays_o[..., None, :] + rays_d[..., None, :] * z_vals[..., None]
     viewdirs = rays_d / torch.norm(rays_d, dim=-1)
     print(coordinates.shape, viewdirs.shape)
