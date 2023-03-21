@@ -1,15 +1,49 @@
 import torch
 
 
-def get_rays(Height, Width, K, c2w):
+def get_rays(Height, Width, K, c2w, gpu=True):
+    # c2w[1, 3, 4]
+    device = "cuda" if gpu else "cpu"
     X, Y = torch.meshgrid(torch.arange(Width), torch.arange(Height))
-    rays_d = torch.stack(((Y - K[0][2]) / K[0][0], 
-                         -(X - K[1][2]) / K[1][1], 
-                         -torch.ones_like(X)), dim=-1)
-    rays_d = rays_d.reshape((-1, 3))[..., None]
-    rays_d = torch.bmm(c2w[:3, :3], rays_d)
-    print(rays_d.shape)
-    rays_o = c2w[:3, 4].expand(rays_d.shape)
+    X = X.t().to(device)
+    Y = Y.t().to(device)
+    # rays_d：[H, W, 3]
+    rays_d = torch.stack([(X - K[0][2]) / K[0][0], 
+                         -(Y - K[1][2]) / K[1][1], 
+                         -torch.ones_like(X)], 
+                         dim=-1)
+    rays_d = torch.bmm(c2w[:, :3, :3].expand(Height * Width, 3, 3), rays_d.reshape((-1, 3))[..., None]).squeeze(-1)
+    rays_d = rays_d.reshape(Height, Width, -1)
+    rays_o = c2w[0, :3, -1].expand(rays_d.shape)
     return rays_d, rays_o
-    
 
+
+def coarse_samples(N_rays, near, far, N_samples, perturb=True, distribution="avg"):
+    assert distribution in ['avg', 'gaussion']
+
+    t_vals = torch.linspace(0.0, 1.0, steps=N_samples)
+    z_vals = near + t_vals * (far - near)
+    z_vals = z_vals.expand(N_rays, N_samples)
+    if perturb:
+        mids = 0.5 * (z_vals[..., 1:] + z_vals[..., :-1])
+        lower = torch.cat([z_vals[..., :1], mids], -1)
+        upper = torch.cat([mids, z_vals[..., -1:]], -1)
+        
+        if distribution == 'avg':
+            t_randoms = torch.rand(z_vals.shape)
+        elif distribution == 'gaussion':
+            t_randoms = torch.randn(z_vals.shape)
+        z_vals = lower + t_randoms * (upper - lower)
+    return z_vals
+
+
+def find_samples():
+    pass
+
+
+def render_rays(z_vals, model, rays_d, rays_o, gpu=True):
+    device = 'cuda' if gpu else "cpu"
+    z_vals = z_vals.to('cuda')
+    coordinates = rays_o[..., None, :] + rays_d[..., None, :] * z_vals[..., None]
+    viewdirs = rays_d / torch.norm(rays_d, dim=-1)
+    print(coordinates.shape, viewdirs.shape)

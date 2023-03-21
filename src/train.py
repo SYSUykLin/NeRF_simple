@@ -22,6 +22,8 @@ def train_nerf(datadir, dataconfig, gpu=True):
     coordinate_L = 10
     direction_L = 4
     N_rays = 4096
+    N_samples = 64
+    N_importances = 128
     near = 2.
     far = 6.
     train_data = datasets['train']
@@ -38,18 +40,17 @@ def train_nerf(datadir, dataconfig, gpu=True):
     find_model = models.nerf(coord_input_dim, direct_input_dim, 
                              coordinate_embeddings, direction_embeddings)
     
-    train_images = torch.from_numpy(train_data["images"])
-    train_poses = torch.from_numpy(train_data["poses"])
+    train_images = train_data["images"]
+    train_poses = train_data["poses"]
     N_images, Height, Weight, channal = train_images.shape
-    K = torch.tensor([
-                    [focal, 0, 0.5*W],
-                    [0, focal, 0.5*H],
-                    [0, 0, 1]
-                    ])
+    # tensor和Tensor不一样，Tensor是生成单精度，tensor是复制之前的精度
+    K = torch.Tensor([
+                     [focal, 0, 0.5 * W],
+                     [0, focal, 0.5 * H],
+                     [0, 0, 1]
+                     ])
     
     if gpu:
-        train_images = train_images.cuda()
-        train_poses = train_poses.cuda()
         K = K.cuda()
 
         coarse_model = coarse_model.cuda()
@@ -61,12 +62,28 @@ def train_nerf(datadir, dataconfig, gpu=True):
         train_image = train_images[index_image]
         train_pose = train_poses[index_image]
 
-        render.get_rays(H, W, K, train_pose)
-        grid_W, grid_H = torch.meshgrid(torch.arange(W), torch.arange(H))
-        grid = torch.stack((grid_H, grid_W), dim=-1).transpose(1, 0)
+        if gpu:
+            train_image = train_image.cuda()
+            train_pose = train_pose.cuda()
+
+        rays_d, rays_o = render.get_rays(H, W, K, train_pose, gpu)
+        grid_W, grid_H = torch.meshgrid(torch.arange(W), torch.arange(H), indexing="xy")
+        grid = torch.stack((grid_H, grid_W), dim=-1)
         grid = grid.reshape((-1, 2))
-        select_indexs = random.sample(grid.shape[0], N_rays)
-        select_coords = grid[select_indexs].long()
+        select_indexs = random.sample(range(grid.shape[0]), N_rays)
+        select_coords = grid[select_indexs]
+        
+        select_rays_d = rays_d[select_coords[:, 0], select_coords[:, 1]]
+        select_rays_o = rays_o[select_coords[:, 0], select_coords[:, 1]]
+        targets_images = train_image[select_coords[:, 0], select_coords[:, 1]]
+
+        z_vals = render.coarse_samples(N_rays, near, far, N_samples, True)
+
+        render.render_rays(z_vals, coarse_model, select_rays_d, select_rays_o)
+
+
+        import sys
+        sys.exit()
         
         
 

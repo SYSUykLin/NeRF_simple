@@ -9,34 +9,44 @@ trans_t = lambda t: torch.Tensor([
     [1, 0, 0, 0],
     [0, 1, 0, 0],
     [0, 0, 1, t],
-    [0, 0, 0, 1]]).float()
+    [0, 0, 0, 1]])
 # 绕x旋转
 rot_phi = lambda phi: torch.Tensor([
     [1, 0, 0, 0],
-    [0, np.cos(phi), -np.sin(phi), 0],
-    [0, np.sin(phi), np.cos(phi), 0],
-    [0, 0, 0, 1]]).float()
+    [0, torch.cos(phi), -torch.sin(phi), 0],
+    [0, torch.sin(phi), torch.cos(phi), 0],
+    [0, 0, 0, 1]])
 # 绕y旋转
 rot_theta = lambda th: torch.Tensor([
-    [np.cos(th), 0, -np.sin(th), 0],
+    [torch.cos(th), 0, -torch.sin(th), 0],
     [0, 1, 0, 0],
-    [np.sin(th), 0, np.cos(th), 0],
-    [0, 0, 0, 1]]).float()
+    [torch.sin(th), 0, torch.cos(th), 0],
+    [0, 0, 0, 1]])
 
 
 def pose_spherical(theta, phi, radius):
+    '''
+    这段代码是原来nerf-pytorch的，np和torch混着用，两个数据类型是有差异的，傻逼真是
+    '''
+    theta = torch.Tensor([theta])
+    phi = torch.Tensor([phi])
+    radius = torch.Tensor([radius])
+
     c2w = trans_t(radius)
-    c2w = rot_phi(phi / 180. * np.pi) @ c2w
-    c2w = rot_theta(theta / 180. * np.pi) @ c2w
-    c2w = torch.Tensor(np.array([[-1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])) @ c2w
+    c2w = rot_phi(phi / 180. * torch.pi) @ c2w
+    c2w = rot_theta(theta / 180. * torch.pi) @ c2w
+    c2w = torch.Tensor([[-1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]]) @ c2w
     return c2w
 
 
 def set_default_datatype(datatype="32Float"):
     if datatype == "32Float":
-        torch.set_default_tensor_type('torch.cuda.FloatTensor')
+        # 内存不够没法设置都在cuda上
+        # torch.set_default_tensor_type('torch.cuda.FloatTensor')
+        torch.set_default_dtype(torch.float32)
     else:
-        torch.set_default_tensor_type('torch.cuda.DoubleTensor')
+        # torch.set_default_tensor_type('torch.cuda.DoubleTensor')
+        torch.set_default_dtype(torch.float64)
 
 
 def gpu_run_environment(gpu=True):
@@ -60,14 +70,15 @@ def read_datasets(datadir, dataconfig):
         poses = []
         for frame in datasets["frames"]:
             fname = os.path.join(datadir, frame['file_path'] + '.png')
-            images.append(imageio.imread(fname))
-            poses.append(np.array(frame['transform_matrix']))
-        images = (np.array(images) / 255.).astype(np.float32)
-        poses = np.array(poses).astype(np.float32)
+            images.append(torch.Tensor(imageio.imread(fname)) / 255.)
+            poses.append(torch.Tensor(frame['transform_matrix']))
+        images = torch.stack(images, dim=0)
+        poses = torch.stack(poses, dim=0)
         return_datasets[s] = {"images": images, "poses": poses}
     camera_angle_X = all_datasets["train"]["camera_angle_x"]
     H, W = images.shape[1:-1]
     focal = (W * 0.5) / np.tan(camera_angle_X * 0.5)
-    render_poses = torch.stack([pose_spherical(angle, -30.0, 4.0) for angle in np.linspace(-180, 180, 40 + 1)[:-1]], 0)
+    render_poses = torch.stack([pose_spherical(angle, -30.0, 4.0) 
+                                for angle in torch.linspace(-180, 180, 40 + 1)[:-1]], 0)
 
     return return_datasets, (H, W, focal), render_poses
