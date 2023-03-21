@@ -42,7 +42,7 @@ def train_nerf(datadir, dataconfig, gpu=True):
     
     train_images = train_data["images"]
     train_poses = train_data["poses"]
-    N_images, Height, Weight, channal = train_images.shape
+    N_images, Height, Width, channal = train_images.shape
     # tensor和Tensor不一样，Tensor是生成单精度，tensor是复制之前的精度
     K = torch.Tensor([
                      [focal, 0, 0.5 * W],
@@ -66,19 +66,27 @@ def train_nerf(datadir, dataconfig, gpu=True):
             train_pose = train_pose.cuda()
 
         rays_d, rays_o = render.get_rays(H, W, K, train_pose, gpu)
-        grid_W, grid_H = torch.meshgrid(torch.arange(W), torch.arange(H), indexing="xy")
+        grid_W, grid_H = torch.meshgrid(torch.arange(W), torch.arange(H), 
+                                        indexing="xy")
         grid = torch.stack((grid_H, grid_W), dim=-1)
         grid = grid.reshape((-1, 2))
         select_indexs = random.sample(range(grid.shape[0]), N_rays)
         select_coords = grid[select_indexs]
         
-        select_rays_d = rays_d[select_coords[:, 0], select_coords[:, 1]]
-        select_rays_o = rays_o[select_coords[:, 0], select_coords[:, 1]]
-        targets_images = train_image[select_coords[:, 0], select_coords[:, 1]]
-
+        train_image = train_image.reshape(Height, Width, channal)
+        select_rays_d = rays_d[select_coords[:, 0], select_coords[:, 1], :]      
+        select_rays_o = rays_o[select_coords[:, 0], select_coords[:, 1], :]
+        targets_image = train_image[select_coords[:, 0], select_coords[:, 1]]
+       
         z_vals = render.coarse_samples(N_rays, near, far, N_samples, True)
+        raw, viewdirs, coordinates = render.generate_raw(z_vals, 
+                                                         coarse_model, 
+                                                         select_rays_d, 
+                                                         select_rays_o)
+        # viewdirs：归一化后的方向
+        color = raw[..., :3]
+        sigma = raw[..., -1]
 
-        render.render_rays(z_vals, coarse_model, select_rays_d, select_rays_o)
 
 
         import sys
