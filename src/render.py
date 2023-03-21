@@ -61,13 +61,16 @@ def generate_raw(z_vals, model, rays_d, rays_o, gpu=True):
 
     return raw_outputs, viewdirs, coordinates
 
+
 def render_rays(z_vals, rays_d, rays_o):
     '''
     z_vals: [N_rays, N_samples]
     rays_d: [N_rays, 3]
     rays_o: [N_rays, 3]
     '''
-    pass
+    z_vals_distance = z_vals[..., 1:] - z_vals[..., :-1]
+    print(z_vals_distance.shape)
+
 
     
     

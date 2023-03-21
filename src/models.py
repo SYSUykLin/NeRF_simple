@@ -55,7 +55,6 @@ class nerf(nn.Module):
         second_hidden = self.second_model(first_hidden)
         sigma = self.sigma_model(second_hidden)
         second_hidden = self.feature_model(second_hidden)
-        print(second_hidden.shape, Y_coordinate.shape)
         second_hidden = torch.cat([second_hidden, Y_coordinate], dim=-1)
         third_hidden = self.feature_direct_model(second_hidden)
         third_hidden = self.relu(third_hidden)

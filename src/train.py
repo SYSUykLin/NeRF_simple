@@ -86,6 +86,7 @@ def train_nerf(datadir, dataconfig, gpu=True):
         # viewdirs：归一化后的方向
         color = raw[..., :3]
         sigma = raw[..., -1]
+        render.render_rays(z_vals, select_rays_d, select_rays_o)
 
 
 
