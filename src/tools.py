@@ -79,7 +79,7 @@ def read_datasets(datadir, dataconfig):
     H, W = images.shape[1:-1]
     focal = (W * 0.5) / np.tan(camera_angle_X * 0.5)
     render_poses = torch.stack([pose_spherical(angle, -30.0, 4.0) 
-                                for angle in torch.linspace(-180, 180, 40 + 1)[:-1]], 0)
+                                for angle in torch.linspace(-180, 180, 40 + 1)[: -1]], 0)
 
     return return_datasets, (H, W, focal), render_poses
 

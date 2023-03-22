@@ -23,10 +23,10 @@ def train_nerf(datadir, dataconfig, gpu=True):
     '''
 
     epochs = 300000
-    test_iter = 100
+    test_iter = 2000
     coordinate_L = 10
     direction_L = 4
-    N_rays = 1024
+    N_rays = 2048
     N_samples = 64
     N_importances = 128
     near = 2.
@@ -58,23 +58,18 @@ def train_nerf(datadir, dataconfig, gpu=True):
                      ])
     
     if gpu:
-        K = K.cuda()
         coarse_model = coarse_model.cuda()
         fine_model = fine_model.cuda()
     
     epochs_lists = [i for i in range(epochs // test_iter)]
     for global_epoch in epochs_lists:
-        for epoch in tqdm(range(test_iter), colour='GREEN'):
+        for epoch in tqdm(range(test_iter), colour='GREEN', ncols=80):
             # 一张图片一张图片训练
             index_image = random.sample(range(N_images), 1)
             train_image = train_images[index_image]
             train_image = train_image[..., :3] * train_image[..., -1:] + (1. - train_image[..., -1:])
             _, Height, Width, channal = train_image.shape
             train_pose = train_poses[index_image]
-
-            if gpu:
-                train_image = train_image.cuda()
-                train_pose = train_pose.cuda()
 
             rays_d, rays_o = render.get_rays(H, W, K, train_pose, gpu)
             grid_W, grid_H = torch.meshgrid(torch.arange(W), torch.arange(H), 
@@ -88,7 +83,10 @@ def train_nerf(datadir, dataconfig, gpu=True):
             select_rays_d = rays_d[select_coords[:, 0], select_coords[:, 1], :]      
             select_rays_o = rays_o[select_coords[:, 0], select_coords[:, 1], :]
             targets_image = train_image[select_coords[:, 0], select_coords[:, 1]]
-        
+            
+            if gpu:
+                targets_image = targets_image.cuda()
+                train_pose = train_pose.cuda()
             z_vals = render.coarse_samples(N_rays, near, far, N_samples, gpu=gpu)
             raw, viewdirs, coordinates = render.generate_raw(z_vals, 
                                                              coarse_model, 
@@ -118,11 +116,23 @@ def train_nerf(datadir, dataconfig, gpu=True):
             loss_images.backward()
             optimizer.step()
 
-            tqdm.write(f"loss : {loss_images}, psnr : {psnr}")
-            writer.add_scalar("Loss", loss_images, global_step=global_epoch * test_iter + epoch)
-            writer.add_scalar("PSNR", psnr.item(), global_step=global_epoch * test_iter + epoch)
+            # 清楚缓存
+            # del targets_image
+            # del train_pose
+            # del select_rays_d
+            # del select_rays_o
+            # del rgb_images_fine, depth_images_fine
+            # del rgb_images, depth_images
+            # torch.cuda.empty_cache()
 
-        render.render_images(render_poses, H, W, K, near, far, N_rays, N_samples, 
+            # tqdm.write(f"loss : {loss_images}, psnr : {psnr.item()}")
+            writer.add_scalar("Loss", loss_images, 
+                              global_step=global_epoch * test_iter + epoch)
+            writer.add_scalar("PSNR", psnr.item(), 
+                              global_step=global_epoch * test_iter + epoch)
+
+        render.render_images(render_poses, H, W, K, near, far, 
+                             N_rays, N_samples, 
                              N_importances, coarse_model, fine_model, gpu)    
         
     writer.close()

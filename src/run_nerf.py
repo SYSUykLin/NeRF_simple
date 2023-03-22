@@ -1,7 +1,7 @@
 import tools
 import train
-import torch
-import models
+import os
+os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
 
 if __name__ == '__main__':

@@ -12,10 +12,9 @@ import cv2
 def get_rays(Height, Width, K, c2w, gpu=True):
     # c2w[1, 3, 4]
     c2w = c2w.reshape(-1, c2w.shape[-1])
-    device = "cuda" if gpu else "cpu"
     X, Y = torch.meshgrid(torch.arange(Width), torch.arange(Height))
-    X = X.t().to(device)
-    Y = Y.t().to(device)
+    X = X.t()
+    Y = Y.t()
     # rays_d：[H, W, 3]
     rays_d = torch.stack([(X - K[0][2]) / K[0][0], 
                          -(Y - K[1][2]) / K[1][1], 
@@ -96,6 +95,8 @@ def generate_raw(z_vals, model, rays_d, rays_o, gpu=True):
     '''
     device = 'cuda' if gpu else "cpu"
     z_vals = z_vals.to(device)
+    rays_d = rays_d.to(device)
+    rays_o = rays_o.to(device)
     coordinates = rays_o[..., None, :] + rays_d[..., None, :] * z_vals[..., 
                                                                        None]
     # viewdirs: [N_rays, 3]
@@ -118,18 +119,23 @@ def render_rays(z_vals, rays_d, color, sigma, gpu=True):
     inf = 1e10
     device = 'cuda' if gpu else "cpu"
     z_vals = z_vals.to(device)
+    rays_d = rays_d.to(device)
     # z轴上的距离 [N_rays, N_samples-1]
     z_vals_distance = z_vals[..., 1:] - z_vals[..., :-1]
     # 转换成射线上的距离 [N_rays, N_samples-1]
     rays_distance = z_vals_distance * torch.norm(rays_d, dim=-1, keepdim=True) 
     # rays_disance [N_rays, N_samples]最后一列没用
-    rays_distance = torch.cat([rays_distance, torch.Tensor([inf]).expand(rays_distance.shape[0], 1).to(device)], 
+    rays_distance = torch.cat([rays_distance, 
+                               torch.Tensor([inf]).
+                               expand(rays_distance.shape[0], 1).to(device)], 
                               dim=-1)
     # alpha = 1 - exp(-sigma*delta) [N_rays, N_samples]
     alpha = 1 - torch.exp(-F.relu(sigma) * rays_distance)
     # 计算Ti = exp(-sum(sigma*delta))
     T = torch.cumprod(1.0 - alpha + 1e-10, dim=-1) 
-    T = torch.cat([torch.ones(rays_distance.shape[0], 1, device=device), T], dim=-1)
+    T = torch.cat([torch.ones(rays_distance.shape[0], 1, 
+                              device=device), T], 
+                              dim=-1)
     T = T[:, :-1]
     weights = alpha * T
     rgb = torch.sum((weights[..., None] * color), dim=1)
@@ -139,15 +145,15 @@ def render_rays(z_vals, rays_d, color, sigma, gpu=True):
 
     return rgb, depth, weights
 
+
 def render_images(render_poses, H, W, K, near, far, N_rays, N_samples, 
                   N_importance, coarse_model, fine_model, gpu=True):
-    device = "cuda" if gpu else "cpu"
-    render_poses = render_poses.to(device)
     coarse_model.eval()
     fine_model.eval()
     renders_images = []
     render_depths = []
-    for i, c2w in enumerate(tqdm(render_poses)):
+    for i, c2w in enumerate(tqdm(render_poses, colour='RED', ncols=80)):
+        # 一下子全部丢去去cuda存不下
         rays_d, rays_o = get_rays(H, W, K, c2w, gpu=True)
         viewdirs = rays_d / torch.norm(rays_d, dim=-1, keepdim=True)
         viewdirs = torch.reshape(viewdirs, [-1, 3]).float()
@@ -157,12 +163,12 @@ def render_images(render_poses, H, W, K, near, far, N_rays, N_samples,
         rays_d = torch.reshape(rays_d, [-1, 3]).float()
         images_render_rays = []
         depth_render_rays = []
-        for i in range(0, sh, N_rays):
+        for i in tqdm(range(0, sh, N_rays), ncols=80):
             select_rays_d = rays_d[i: i + N_rays]
             select_rays_o = rays_o[i: i + N_rays]
-            near, far = near * torch.ones_like(select_rays_d[..., :1]).to(device), far * torch.ones_like(select_rays_o[..., :1]).to(device)
-            
-            z_vals = coarse_samples(N_rays, near, far, N_samples, gpu=gpu)
+            # 有可能不能整除
+            Num_rays = select_rays_d.shape[0]
+            z_vals = coarse_samples(Num_rays, near, far, N_samples, gpu=gpu)
             raw, viewdirs, coordinates = generate_raw(z_vals, 
                                                       coarse_model, 
                                                       select_rays_d, 
@@ -181,22 +187,30 @@ def render_images(render_poses, H, W, K, near, far, N_rays, N_samples,
             sigma_fine = raw_fine[..., -1]
             rgb_images_fine, depth_images_fine, weights_fine = render_rays(z_vals_all, select_rays_d, 
                                                                            color_fine, sigma_fine, gpu)
-            images_render_rays.append(rgb_images_fine)
-            depth_render_rays.append(depth_images_fine)
-        images = torch.cat(images_render_rays, dim=0).reshape(H, W, -1)
-        depth = torch.cat(depth_render_rays, dim=0).reshape(H, W)
-        renders_images.append(images.cpu().numpy())
-        render_depths.append(depth.cpu().numpy())
-    renders_images = torch.stack(renders_images, dim=0)
-    imageio.mimwrite(os.path.join('dataset\\nerf_synthetic\\lego\\logs', 'fine_network_video.mp4'), 
+            # 只能做一半拿一半，要不然内存根本不够
+            images_render_rays.append(rgb_images_fine.detach().cpu().numpy())
+            depth_render_rays.append(depth_images_fine.detach().cpu().numpy())
+        images = np.concatenate(images_render_rays, axis=0).reshape(H, W, -1)
+        depth = np.concatenate(depth_render_rays, axis=0).reshape(H, W)
+        renders_images.append(images)
+        render_depths.append(depth)
+    renders_images = np.stack(renders_images, 0)
+    imageio.mimwrite(os.path.join('dataset\\nerf_synthetic\\lego\\logs', 'fine_network_rgb_video.mp4'), 
                      tools.to8b(renders_images), fps=30, quality=8)
-    depth_map_visualization(render_depths)
+    render_depths = depth_map_visualization(render_depths)
+    imageio.mimwrite(os.path.join('dataset\\nerf_synthetic\\lego\\logs', 'fine_network_depth_video.mp4'), 
+                     tools.to8b(render_depths), fps=30, quality=8)
     
     return renders_images, render_depths
 
+
 def depth_map_visualization(depth_images):
+    depth_imgs = []
     for image in depth_images:
         im_color = cv2.applyColorMap(cv2.convertScaleAbs(image, alpha=15), cv2.COLORMAP_JET)
-        im = Image.fromarray(im_color)
-        print(im.shape)
+        img = Image.fromarray(im_color)
+        depth_imgs.append(img)
+    multi_img = np.stack(depth_imgs, 0)
+    return multi_img
+        
         
