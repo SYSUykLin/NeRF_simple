@@ -82,3 +82,11 @@ def read_datasets(datadir, dataconfig):
                                 for angle in torch.linspace(-180, 180, 40 + 1)[:-1]], 0)
 
     return return_datasets, (H, W, focal), render_poses
+
+
+def mse2psnr(X, gpu):
+    device = 'cuda' if gpu else 'cpu'
+    return -10. * torch.log(X) / torch.log(torch.Tensor([10.])).to(device)
+
+ 
+to8b = lambda x: (255 * np.clip(x, 0, 1)).astype(np.uint8)
