@@ -23,7 +23,7 @@ def train_nerf(datadir, dataconfig, gpu=True):
     '''
 
     epochs = 300000
-    test_iter = 20
+    test_iter = 2000
     coordinate_L = 10
     direction_L = 4
     N_rays = 1024
@@ -126,7 +126,7 @@ def train_nerf(datadir, dataconfig, gpu=True):
         render.render_images(render_poses, H, W, K, near, far, 
                              rander_rays, N_samples, 
                              N_importances, coarse_model, fine_model, global_epoch * test_iter, gpu)    
-        if global_epoch > 4:
+        if global_epoch > 2:
             torch.nn.utils.clip_grad_norm_(grad_vars, 20) 
         
     writer.close()
