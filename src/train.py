@@ -23,11 +23,11 @@ def train_nerf(datadir, dataconfig, gpu=True):
     '''
 
     epochs = 300000
-    test_iter = 2000
+    test_iter = 10000
     coordinate_L = 10
     direction_L = 4
     N_rays = 1024
-    rander_rays = 6144
+    rander_rays = 4096
     N_samples = 64
     N_importances = 128
     near = 2.
@@ -48,8 +48,10 @@ def train_nerf(datadir, dataconfig, gpu=True):
     grad_vars = list(coarse_model.parameters()) + list(fine_model.parameters())
     optimizer = torch.optim.Adam(params=grad_vars, lr=5e-4, betas=(0.9, 0.999))
     
+    # 所有的训练数据
     train_images = train_data["images"]
     train_poses = train_data["poses"]
+
     N_images, Height, Width, channal = train_images.shape
     # tensor和Tensor不一样，Tensor是生成单精度，tensor是复制之前的精度
     K = torch.Tensor([
@@ -115,6 +117,7 @@ def train_nerf(datadir, dataconfig, gpu=True):
             loss_images = loss_mse(rgb_images_fine, targets_image)
             psnr = tools.mse2psnr(loss_images, gpu)
             loss_images.backward()
+            torch.nn.utils.clip_grad_norm_(grad_vars, 10) 
             optimizer.step()
 
             # tqdm.write(f"loss : {loss_images}, psnr : {psnr.item()}")
@@ -126,8 +129,7 @@ def train_nerf(datadir, dataconfig, gpu=True):
         render.render_images(render_poses, H, W, K, near, far, 
                              rander_rays, N_samples, 
                              N_importances, coarse_model, fine_model, global_epoch * test_iter, gpu)    
-        if global_epoch > 2:
-            torch.nn.utils.clip_grad_norm_(grad_vars, 20) 
+            
         
     writer.close()
         

@@ -50,10 +50,17 @@ def set_default_datatype(datatype="32Float"):
 
 
 def gpu_run_environment(gpu=True):
+
     if not gpu:
         return False
     elif gpu and torch.cuda.is_available():
+        import torch.backends.cudnn as cudnn
+        cudnn.deterministic = True
+        cudnn.benchmark = True
+        torch.backends.cudnn.enabled = True
         return True
+    else:
+        return False
 
 
 def read_datasets(datadir, dataconfig):
@@ -79,7 +86,7 @@ def read_datasets(datadir, dataconfig):
     H, W = images.shape[1:-1]
     focal = (W * 0.5) / np.tan(camera_angle_X * 0.5)
     render_poses = torch.stack([pose_spherical(angle, -30.0, 4.0) 
-                                for angle in torch.linspace(-180, 180, 2 + 1)[: -1]], 0)
+                                for angle in torch.linspace(-180, 180, 40 + 1)[: -1]], 0)
 
     return return_datasets, (H, W, focal), render_poses
 
