@@ -103,6 +103,7 @@ def generate_raw(z_vals, model, rays_d, rays_o, gpu=True):
     viewdirs = rays_d / torch.norm(rays_d, dim=-1, keepdim=True)
     viewdirs = viewdirs[:, None, :].expand(coordinates.shape)
     # [N_rays, N_samples, 4]
+    model.train()
     raw_outputs = model(coordinates, viewdirs)
 
     return raw_outputs, viewdirs, coordinates
