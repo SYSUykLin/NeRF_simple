@@ -23,7 +23,7 @@ def train_nerf(datadir, dataconfig, gpu=True):
     '''
 
     epochs = 300000
-    test_iter = 10000
+    test_iter = 5000
     coordinate_L = 10
     direction_L = 4
     N_rays = 1024
@@ -119,6 +119,15 @@ def train_nerf(datadir, dataconfig, gpu=True):
             loss_images.backward()
             torch.nn.utils.clip_grad_norm_(grad_vars, 10) 
             optimizer.step()
+
+            # 原生代码里面的步长优化
+            lrate_decay = 250
+            lrate = 5e-4
+            decay_rate = 0.1
+            decay_steps = lrate_decay * 1000
+            new_lrate = lrate * (decay_rate ** ((global_epoch * test_iter + epoch) / decay_steps))
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = new_lrate
 
             # tqdm.write(f"loss : {loss_images}, psnr : {psnr.item()}")
             writer.add_scalar("Loss", loss_images, 

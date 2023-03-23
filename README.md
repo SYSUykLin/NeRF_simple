@@ -11,4 +11,6 @@
 训练一张图片所用射线1024，测试一张图片所用射线6144。
 
 command：python run_nerf.py
+env：和nerf-pytorch一样的环境，但是torch用的1.13.0版本。如果是1.9版本会存在网络append
+方法的问题，meshgrid的参数indexing的问题，自己调一下就行。
 
