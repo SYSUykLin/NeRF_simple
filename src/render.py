@@ -147,58 +147,65 @@ def render_rays(z_vals, rays_d, color, sigma, gpu=True):
 
 
 def render_images(render_poses, H, W, K, near, far, N_rays, N_samples, 
-                  N_importance, coarse_model, fine_model, gpu=True):
+                  N_importance, coarse_model, fine_model, epoch, gpu=True):
     coarse_model.eval()
     fine_model.eval()
     renders_images = []
     render_depths = []
     for i, c2w in enumerate(tqdm(render_poses, colour='RED', ncols=80)):
         # 一下子全部丢去去cuda存不下
-        rays_d, rays_o = get_rays(H, W, K, c2w, gpu=True)
-        viewdirs = rays_d / torch.norm(rays_d, dim=-1, keepdim=True)
-        viewdirs = torch.reshape(viewdirs, [-1, 3]).float()
-        sh = H * W
+        with torch.no_grad():
+            rays_d, rays_o = get_rays(H, W, K, c2w, gpu)
+            viewdirs = rays_d / torch.norm(rays_d, dim=-1, keepdim=True)
+            viewdirs = torch.reshape(viewdirs, [-1, 3]).float()
+            sh = H * W
 
-        rays_o = torch.reshape(rays_o, [-1, 3]).float()
-        rays_d = torch.reshape(rays_d, [-1, 3]).float()
-        images_render_rays = []
-        depth_render_rays = []
-        for i in tqdm(range(0, sh, N_rays), ncols=80):
-            select_rays_d = rays_d[i: i + N_rays]
-            select_rays_o = rays_o[i: i + N_rays]
-            # 有可能不能整除
-            Num_rays = select_rays_d.shape[0]
-            z_vals = coarse_samples(Num_rays, near, far, N_samples, gpu=gpu)
-            raw, viewdirs, coordinates = generate_raw(z_vals, 
-                                                      coarse_model, 
-                                                      select_rays_d, 
-                                                      select_rays_o)
-            color = raw[..., :3]
-            sigma = raw[..., -1]
-            rgb_images, depth_images, weights = render_rays(z_vals, select_rays_d, color, sigma, gpu)
-            z_vals_fine_sample = fine_samples(weights, select_rays_d, z_vals, N_importance, gpu)
-            z_vals_fine_sample = z_vals_fine_sample.detach()
-            z_vals_all, _ = torch.sort(torch.cat([z_vals, z_vals_fine_sample], -1), -1)
-            raw_fine, viewdirs_fine, coordinates_fine = generate_raw(z_vals_all, 
-                                                                     fine_model, 
-                                                                     select_rays_d, 
-                                                                     select_rays_o)
-            color_fine = raw_fine[..., :3]
-            sigma_fine = raw_fine[..., -1]
-            rgb_images_fine, depth_images_fine, weights_fine = render_rays(z_vals_all, select_rays_d, 
-                                                                           color_fine, sigma_fine, gpu)
-            # 只能做一半拿一半，要不然内存根本不够
-            images_render_rays.append(rgb_images_fine.detach().cpu().numpy())
-            depth_render_rays.append(depth_images_fine.detach().cpu().numpy())
+            rays_o = torch.reshape(rays_o, [-1, 3]).float()
+            rays_d = torch.reshape(rays_d, [-1, 3]).float()
+            images_render_rays = []
+            depth_render_rays = []
+            for i in tqdm(range(0, sh, N_rays), ncols=80):
+                select_rays_d = rays_d[i: i + N_rays]
+                select_rays_o = rays_o[i: i + N_rays]
+                # 有可能不能整除
+                Num_rays = select_rays_d.shape[0]
+                z_vals = coarse_samples(Num_rays, near, far, N_samples, gpu=gpu)
+                raw, viewdirs, coordinates = generate_raw(z_vals, 
+                                                          coarse_model, 
+                                                          select_rays_d, 
+                                                          select_rays_o)
+                color = raw[..., :3]
+                sigma = raw[..., -1]
+                rgb_images, depth_images, weights = render_rays(z_vals, select_rays_d, color, sigma, gpu)
+                z_vals_fine_sample = fine_samples(weights, select_rays_d, z_vals, N_importance, gpu)
+                z_vals_fine_sample = z_vals_fine_sample.detach()
+                z_vals_all, _ = torch.sort(torch.cat([z_vals, z_vals_fine_sample], -1), -1)
+                raw_fine, viewdirs_fine, coordinates_fine = generate_raw(z_vals_all, 
+                                                                         fine_model, 
+                                                                         select_rays_d, 
+                                                                         select_rays_o)
+                color_fine = raw_fine[..., :3]
+                sigma_fine = raw_fine[..., -1]
+                rgb_images_fine, depth_images_fine, weights_fine = render_rays(z_vals_all, select_rays_d, 
+                                                                               color_fine, sigma_fine, gpu)
+                # 只能做一半拿一半，要不然内存根本不够
+                images_render_rays.append(rgb_images_fine.detach().cpu().numpy())
+                depth_render_rays.append(depth_images_fine.detach().cpu().numpy())
+
+            del select_rays_d, select_rays_o
+            del rgb_images, depth_images
+            del z_vals_all, z_vals_fine_sample
+            del rgb_images_fine, depth_images_fine
+            torch.cuda.empty_cache()
         images = np.concatenate(images_render_rays, axis=0).reshape(H, W, -1)
         depth = np.concatenate(depth_render_rays, axis=0).reshape(H, W)
         renders_images.append(images)
         render_depths.append(depth)
     renders_images = np.stack(renders_images, 0)
-    imageio.mimwrite(os.path.join('dataset\\nerf_synthetic\\lego\\logs', 'fine_network_rgb_video.mp4'), 
+    imageio.mimwrite(os.path.join('dataset\\nerf_synthetic\\lego\\logs', str(epoch) + '_fine_network_rgb_video.mp4'), 
                      tools.to8b(renders_images), fps=30, quality=8)
     render_depths = depth_map_visualization(render_depths)
-    imageio.mimwrite(os.path.join('dataset\\nerf_synthetic\\lego\\logs', 'fine_network_depth_video.mp4'), 
+    imageio.mimwrite(os.path.join('dataset\\nerf_synthetic\\lego\\logs', str(epoch) + '_fine_network_depth_video.mp4'), 
                      tools.to8b(render_depths), fps=30, quality=8)
     
     return renders_images, render_depths

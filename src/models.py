@@ -24,20 +24,21 @@ class nerf(nn.Module):
 
         self.first_model = nn.Sequential(nn.Linear(self.coordinate_input_dim, 
                                                    self.hidden_size), 
-                                         nn.ReLU())
+                                         nn.ReLU(inplace=True))
         for i in range(self.first_depth - 1):
             self.first_model.append(nn.Linear(self.hidden_size, 
                                               self.hidden_size)) 
-            self.first_model.append(nn.ReLU())
+            # 这个得加，变成替换操作，要不然内存太大了
+            self.first_model.append(nn.ReLU(inplace=True))
         
         self.second_model = nn.Sequential(nn.Linear(self.hidden_size + 
                                                     self.coordinate_input_dim, 
                                                     self.hidden_size), 
-                                          nn.ReLU())
+                                          nn.ReLU(inplace=True))
         for i in range(self.second_depth - 1):
             self.second_model.append(nn.Linear(self.hidden_size, 
                                                self.hidden_size))
-            self.second_model.append(nn.ReLU())
+            self.second_model.append(nn.ReLU(inplace=True))
         
         self.sigma_model = nn.Linear(self.hidden_size, 1)
         self.feature_model = nn.Linear(self.hidden_size, self.hidden_size)
@@ -45,7 +46,7 @@ class nerf(nn.Module):
                                               self.direction_input_dim, 
                                               self.hidden_size // 2)
         self.color_model = nn.Linear(self.hidden_size // 2, 3)
-        self.relu = nn.ReLU()
+        self.relu = nn.ReLU(inplace=True)
     
     def forward(self, X_coordinate, Y_coordinate):
         X_coordinate = self.embeddings_coordi(X_coordinate)
