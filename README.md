@@ -10,7 +10,14 @@
 * 测试渲染全图的时候渲染一部分就直接调到cpu里面不占内存
 训练一张图片所用射线1024，测试一张图片所用射线6144。
 
-command：python run_nerf.py
-env：和nerf-pytorch一样的环境，但是torch用的1.13.0版本。如果是1.9版本会存在网络append
-方法的问题，meshgrid的参数indexing的问题，自己调一下就行。
+* command：python run_nerf.py
+* env：和nerf-pytorch一样的环境，但是torch用的1.13.0版本。如果是1.9版本会存在网络append
+* 方法的问题，meshgrid的参数indexing的问题，自己调一下就行。
+* Note：模型单纯的用800x800图片训练会陷入局部最优的问题，训练五次可能只有一两次是收敛的。
+加上他的步长学习
 
+效果：
+<video id="video" controls="" preload="none" poster="封面">
+      <source id="mp4" src="mp4格式视频" type="dataset\nerf_synthetic\lego\logs\55000_fine_network_rgb_video.mp4">
+</videos>
+还是有点模糊，但是设备限制没法跑太多轮次了。

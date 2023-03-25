@@ -64,6 +64,8 @@ def train_nerf(datadir, dataconfig, gpu=True):
         coarse_model = coarse_model.cuda()
         fine_model = fine_model.cuda()
     
+    lr_global_epochs = 0
+
     epochs_lists = [i for i in range(epochs // test_iter)]
     for global_epoch in range(len(epochs_lists)):
         for epoch in tqdm(range(test_iter), colour='GREEN', ncols=80):
@@ -78,6 +80,14 @@ def train_nerf(datadir, dataconfig, gpu=True):
             grid_W, grid_H = torch.meshgrid(torch.arange(W), torch.arange(H), 
                                             indexing="xy")
             grid = torch.stack((grid_H, grid_W), dim=-1)
+            if global_epoch < 3:
+                dH = int(H // 2 * 0.6)
+                dW = int(W // 2 * 0.6)
+                grid = torch.stack(
+                        torch.meshgrid(
+                            torch.linspace(H // 2 - dH, H // 2 + dH - 1, 2 * dH), 
+                            torch.linspace(W // 2 - dW, W // 2 + dW - 1, 2 * dW)
+                        ), -1).long()            
             grid = grid.reshape((-1, 2))
             select_indexs = random.sample(range(grid.shape[0]), N_rays)
             select_coords = grid[select_indexs]
@@ -117,7 +127,6 @@ def train_nerf(datadir, dataconfig, gpu=True):
             loss_images = loss_mse(rgb_images_fine, targets_image)
             psnr = tools.mse2psnr(loss_images, gpu)
             loss_images.backward()
-            torch.nn.utils.clip_grad_norm_(grad_vars, 10) 
             optimizer.step()
 
             # 原生代码里面的步长优化
@@ -125,15 +134,17 @@ def train_nerf(datadir, dataconfig, gpu=True):
             lrate = 5e-4
             decay_rate = 0.1
             decay_steps = lrate_decay * 1000
-            new_lrate = lrate * (decay_rate ** ((global_epoch * test_iter + epoch) / decay_steps))
+            new_lrate = lrate * (decay_rate ** ((lr_global_epochs) / decay_steps))
             for param_group in optimizer.param_groups:
                 param_group['lr'] = new_lrate
 
-            # tqdm.write(f"loss : {loss_images}, psnr : {psnr.item()}")
+            if epoch % 5 == 0:
+                tqdm.write(f"loss : {loss_images}, psnr : {psnr.item()}")
             writer.add_scalar("Loss", loss_images, 
-                              global_step=global_epoch * test_iter + epoch)
+                              global_step=lr_global_epochs)
             writer.add_scalar("PSNR", psnr.item(), 
-                              global_step=global_epoch * test_iter + epoch)
+                              global_step=lr_global_epochs)
+            lr_global_epochs += 1
         torch.cuda.empty_cache()
         render.render_images(render_poses, H, W, K, near, far, 
                              rander_rays, N_samples, 
