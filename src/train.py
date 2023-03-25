@@ -12,8 +12,8 @@ TIMESTAMP = "{0:%Y-%m-%dT%H-%M-%S/}".format(datetime.now())
 def train_nerf(datadir, dataconfig, gpu=True):
     print(f"use GPU : {gpu}")
     writer = SummaryWriter('dataset\\nerf_synthetic\\lego\\logs' + str(TIMESTAMP))
-    datasets, (H, W, focal), render_poses = tools.read_datasets(datadir, 
-                                                                dataconfig)
+    datasets, (H, W, focal), render_poses, min_bound, max_bound = tools.read_datasets(datadir, 
+                                                                                      dataconfig)
     print(f"images shape : {H, W}")
 
     '''
@@ -35,12 +35,11 @@ def train_nerf(datadir, dataconfig, gpu=True):
     train_data = datasets['train']
     val_data = datasets['validate']
     test_data = datasets['test']
-
-    coordinate_embeddings = models.fourier_embedding(L=coordinate_L)
+    
+    coordinate_embeddings = models.hash_embedding((min_bound, max_bound))
     direction_embeddings = models.fourier_embedding(L=direction_L)
     coord_input_dim = coordinate_embeddings.count_dim()
     direct_input_dim = direction_embeddings.count_dim()
-
     coarse_model = models.nerf(coord_input_dim, direct_input_dim, 
                                coordinate_embeddings, direction_embeddings)
     fine_model = models.nerf(coord_input_dim, direct_input_dim, 
@@ -64,6 +63,8 @@ def train_nerf(datadir, dataconfig, gpu=True):
         coarse_model = coarse_model.cuda()
         fine_model = fine_model.cuda()
     
+    lr_global_epochs = 0
+
     epochs_lists = [i for i in range(epochs // test_iter)]
     for global_epoch in range(len(epochs_lists)):
         for epoch in tqdm(range(test_iter), colour='GREEN', ncols=80):
@@ -78,6 +79,14 @@ def train_nerf(datadir, dataconfig, gpu=True):
             grid_W, grid_H = torch.meshgrid(torch.arange(W), torch.arange(H), 
                                             indexing="xy")
             grid = torch.stack((grid_H, grid_W), dim=-1)
+            if global_epoch < 3:
+                dH = int(H // 2 * 0.6)
+                dW = int(W // 2 * 0.6)
+                grid = torch.stack(
+                                   torch.meshgrid(
+                                                  torch.linspace(H // 2 - dH, H // 2 + dH - 1, 2 * dH), 
+                                                  torch.linspace(W // 2 - dW, W // 2 + dW - 1, 2 * dW)
+                                                 ), -1).long()            
             grid = grid.reshape((-1, 2))
             select_indexs = random.sample(range(grid.shape[0]), N_rays)
             select_coords = grid[select_indexs]
@@ -124,17 +133,26 @@ def train_nerf(datadir, dataconfig, gpu=True):
             lrate = 5e-4
             decay_rate = 0.1
             decay_steps = lrate_decay * 1000
-            new_lrate = lrate * (decay_rate ** ((global_epoch * test_iter + epoch) / decay_steps))
+            new_lrate = lrate * (decay_rate ** ((lr_global_epochs) / decay_steps))
             for param_group in optimizer.param_groups:
                 param_group['lr'] = new_lrate
+<<<<<<< HEAD
             if epoch % 5 == 0:  
                 tqdm.write(f"loss : {loss_images}, psnr : {psnr.item()}")
             writer.add_scalar("Loss", loss_images, 
                               global_step=global_epoch * test_iter + epoch)
             
             
+=======
+
+            if epoch % 5 == 0:
+                tqdm.write(f"loss : {loss_images}, psnr : {psnr.item()}")
+            writer.add_scalar("Loss", loss_images, 
+                              global_step=lr_global_epochs)
+>>>>>>> 7d8de40001ed208e0c09dd09db56acabd383f4fc
             writer.add_scalar("PSNR", psnr.item(), 
-                              global_step=global_epoch * test_iter + epoch)
+                              global_step=lr_global_epochs)
+            lr_global_epochs += 1
         torch.cuda.empty_cache()
         render.render_images(render_poses, H, W, K, near, far, 
                              rander_rays, N_samples, 
