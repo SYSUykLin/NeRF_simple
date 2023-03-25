@@ -1,7 +1,7 @@
 # NeRF_simple
-简单实现：paper，ECCV 2022 NeRF
-设备：1060台式，6代i7，6G显存
-数据：只选取了lego数据，跑了800x800整张图，和nerf-pytorch跑一半有区别。
+* 简单实现：paper，ECCV 2022 NeRF
+* 设备：1060台式，6代i7，6G显存
+* 数据：只选取了lego数据，跑了800x800整张图，和nerf-pytorch跑一半有区别。
 
 为了减少占用现存做了几步操作：
 * 没有像nerf-pytorch一样一开始把rays都放进cuda里面train，用到什么就to(cuda)什么，这样能够保证1024条射线能够训练起来
