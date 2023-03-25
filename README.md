@@ -17,7 +17,8 @@
 加上他的步长学习
 
 效果：
-<video id="video" controls="" preload="none" poster="封面">
-      <source id="mp4" src="mp4格式视频" type="dataset\nerf_synthetic\lego\logs\55000_fine_network_rgb_video.mp4">
-</videos>
+
+https://user-images.githubusercontent.com/34080744/227677972-165d7c9d-6fb8-490c-99b8-e095a7e678cf.mp4
+
 还是有点模糊，但是设备限制没法跑太多轮次了。
+![nerf_simple_loss_pnsr](https://user-images.githubusercontent.com/34080744/227678042-040d5c10-3758-4a09-a964-a3043e0d531c.png)
