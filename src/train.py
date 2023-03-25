@@ -14,6 +14,7 @@ def train_nerf(datadir, dataconfig, gpu=True):
     writer = SummaryWriter('dataset\\nerf_synthetic\\lego\\logs' + str(TIMESTAMP))
     datasets, (H, W, focal), render_poses, min_bound, max_bound = tools.read_datasets(datadir, 
                                                                                       dataconfig)
+    bounding_boxes = (min_bound, max_bound)
     print(f"images shape : {H, W}")
 
     '''
@@ -33,17 +34,22 @@ def train_nerf(datadir, dataconfig, gpu=True):
     near = 2.
     far = 6.
     train_data = datasets['train']
-    val_data = datasets['validate']
-    test_data = datasets['test']
+    # val_data = datasets['validate']
+    # test_data = datasets['test']
     
-    coordinate_embeddings = models.hash_embedding((min_bound, max_bound))
-    direction_embeddings = models.fourier_embedding(L=direction_L)
+    coordinate_embeddings = models.hash_embedding(bounding_boxes)
+    # coordinate_embeddings = models.fourier_embedding(L=10)
+    direction_embeddings = models.SHEncoder()
     coord_input_dim = coordinate_embeddings.count_dim()
     direct_input_dim = direction_embeddings.count_dim()
-    coarse_model = models.nerf(coord_input_dim, direct_input_dim, 
-                               coordinate_embeddings, direction_embeddings)
-    fine_model = models.nerf(coord_input_dim, direct_input_dim, 
-                             coordinate_embeddings, direction_embeddings)
+    # coarse_model = models.nerf(coord_input_dim, direct_input_dim, 
+    #                            coordinate_embeddings, direction_embeddings)
+    # fine_model = models.nerf(coord_input_dim, direct_input_dim, 
+    #                          coordinate_embeddings, direction_embeddings)
+    coarse_model = models.nerf_ngp(coord_input_dim, direct_input_dim, 
+                                   coordinate_embeddings, direction_embeddings)
+    fine_model = models.nerf_ngp(coord_input_dim, direct_input_dim, 
+                                 coordinate_embeddings, direction_embeddings)
     grad_vars = list(coarse_model.parameters()) + list(fine_model.parameters())
     optimizer = torch.optim.Adam(params=grad_vars, lr=5e-4, betas=(0.9, 0.999))
     
@@ -136,20 +142,11 @@ def train_nerf(datadir, dataconfig, gpu=True):
             new_lrate = lrate * (decay_rate ** ((lr_global_epochs) / decay_steps))
             for param_group in optimizer.param_groups:
                 param_group['lr'] = new_lrate
-<<<<<<< HEAD
-            if epoch % 5 == 0:  
-                tqdm.write(f"loss : {loss_images}, psnr : {psnr.item()}")
-            writer.add_scalar("Loss", loss_images, 
-                              global_step=global_epoch * test_iter + epoch)
-            
-            
-=======
 
             if epoch % 5 == 0:
                 tqdm.write(f"loss : {loss_images}, psnr : {psnr.item()}")
             writer.add_scalar("Loss", loss_images, 
                               global_step=lr_global_epochs)
->>>>>>> 7d8de40001ed208e0c09dd09db56acabd383f4fc
             writer.add_scalar("PSNR", psnr.item(), 
                               global_step=lr_global_epochs)
             lr_global_epochs += 1
