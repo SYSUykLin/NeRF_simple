@@ -203,10 +203,10 @@ def render_images(render_poses, H, W, K, near, far, N_rays, N_samples,
         renders_images.append(images)
         render_depths.append(depth)
     renders_images = np.stack(renders_images, 0)
-    imageio.mimwrite(os.path.join('D:/NeRF/NeRF_project/dataset/nerf_synthetic/lego/logs', str(epoch) + '_fine_network_rgb_video.mp4'), 
+    imageio.mimwrite(os.path.join('C:/Users/15813/Desktop/git_projects/NeRF_simple/dataset/nerf_synthetic/lego', str(epoch) + '_fine_network_rgb_video.mp4'), 
                      tools.to8b(renders_images), fps=30, quality=8)
     render_depths = depth_map_visualization(render_depths)
-    imageio.mimwrite(os.path.join('D:/NeRF/NeRF_project/dataset/nerf_synthetic/lego/logs', str(epoch) + '_fine_network_depth_video.mp4'), 
+    imageio.mimwrite(os.path.join('C:/Users/15813/Desktop/git_projects/NeRF_simple/dataset/nerf_synthetic/lego', str(epoch) + '_fine_network_depth_video.mp4'), 
                      tools.to8b(render_depths), fps=30, quality=8)
     
     return renders_images, render_depths
