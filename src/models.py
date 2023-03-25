@@ -97,6 +97,48 @@ class fourier_embedding(nn.Module):
         if self.include:
             cood_dim += 3
         return cood_dim
+    
+
+class hash_embedding(nn.Module):
+    def __init__(self, bounding_box, T=19, L=16, features_size=2, min_resolution=16, finest_resolution=512):
+        super(hash_embedding, self).__init__()
+        self.T = 2**T
+        self.levels = L
+        self.features_size = features_size
+        self.min_resolution = torch.Tensor([min_resolution])
+        self.max_resolution = torch.Tensor([finest_resolution])
+        self.bounding_box = bounding_box
+        self.offset = torch.tensor([[[i, j, k] for i in [0, 1] for j in [0, 1] for k in [0, 1]]],
+                                   device='cuda')
+        self.b = torch.exp((torch.log(self.max_resolution) - torch.log(self.min_resolution)) / (self.levels - 1))
+        self.pi = torch.tensor([1, 2654435761, 805459861])
+        
+        # 这个写法能兼容1.9的torch
+        embeddings_layers = [nn.Embedding(self.T, self.features_size) for i in range(self.levels)]
+        self.embeddings = nn.Sequential(*embeddings_layers)
+
+    def forward(self, x):
+        # 归一化x坐标
+        min_bound, max_bound = self.bounding_box[0], self.bounding_box[1]
+        min_bound = min_bound[None, :].expand(x.shape)
+        max_bound = max_bound[None, :].expand(x.shape)
+        x = (x - min_bound) / (max_bound - min_bound)
+        for level in range(self.levels):
+            Nl = torch.floor(self.min_resolution * (self.b ** level))
+            box_size = (max_bound - min_bound) / Nl
+            min_box = torch.floor(x * Nl).int()
+            box_indexs = min_box[None, ...] + self.offset
+            self.hash_code(box_indexs)
+
+    def hash_code(self, box_indexs):
+        print(box_indexs.shape)
+        pass   
+
+    def count_dim(self):
+        return self.features_size * self.levels
+
+
+
 
 
 

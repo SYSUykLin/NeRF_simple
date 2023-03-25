@@ -12,8 +12,8 @@ TIMESTAMP = "{0:%Y-%m-%dT%H-%M-%S/}".format(datetime.now())
 def train_nerf(datadir, dataconfig, gpu=True):
     print(f"use GPU : {gpu}")
     writer = SummaryWriter('dataset\\nerf_synthetic\\lego\\logs' + str(TIMESTAMP))
-    datasets, (H, W, focal), render_poses = tools.read_datasets(datadir, 
-                                                                dataconfig)
+    datasets, (H, W, focal), render_poses, min_bound, max_bound = tools.read_datasets(datadir, 
+                                                                                      dataconfig)
     print(f"images shape : {H, W}")
 
     '''
@@ -35,12 +35,11 @@ def train_nerf(datadir, dataconfig, gpu=True):
     train_data = datasets['train']
     val_data = datasets['validate']
     test_data = datasets['test']
-
-    coordinate_embeddings = models.fourier_embedding(L=coordinate_L)
+    
+    coordinate_embeddings = models.hash_embedding((min_bound, max_bound))
     direction_embeddings = models.fourier_embedding(L=direction_L)
     coord_input_dim = coordinate_embeddings.count_dim()
     direct_input_dim = direction_embeddings.count_dim()
-
     coarse_model = models.nerf(coord_input_dim, direct_input_dim, 
                                coordinate_embeddings, direction_embeddings)
     fine_model = models.nerf(coord_input_dim, direct_input_dim, 
@@ -84,10 +83,10 @@ def train_nerf(datadir, dataconfig, gpu=True):
                 dH = int(H // 2 * 0.6)
                 dW = int(W // 2 * 0.6)
                 grid = torch.stack(
-                        torch.meshgrid(
-                            torch.linspace(H // 2 - dH, H // 2 + dH - 1, 2 * dH), 
-                            torch.linspace(W // 2 - dW, W // 2 + dW - 1, 2 * dW)
-                        ), -1).long()            
+                                   torch.meshgrid(
+                                                  torch.linspace(H // 2 - dH, H // 2 + dH - 1, 2 * dH), 
+                                                  torch.linspace(W // 2 - dW, W // 2 + dW - 1, 2 * dW)
+                                                 ), -1).long()            
             grid = grid.reshape((-1, 2))
             select_indexs = random.sample(range(grid.shape[0]), N_rays)
             select_coords = grid[select_indexs]
