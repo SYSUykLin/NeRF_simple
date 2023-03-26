@@ -158,6 +158,11 @@ def train_nerf(datadir, dataconfig, dataname, gpu=True):
                               global_step=lr_global_epochs)
             lr_global_epochs += 1
         torch.cuda.empty_cache()
+        torch.save({'coordinate_embeddings': coordinate_embeddings.state_dict()}, 'models\\coordinate_embeddings.pth')
+        torch.save({'direction_embeddings': direction_embeddings.state_dict()}, 'models\\direction_embeddings.pth')
+        torch.save({'coarse_model': coarse_model.state_dict()}, 'models\\coarse_model.pth')
+        torch.save({'fine_model': fine_model.state_dict()}, 'models\\fine_model.pth')
+       
         render.render_images(render_poses, H, W, K, near, far, 
                              rander_rays, N_samples, 
                              N_importances, coarse_model, fine_model, 

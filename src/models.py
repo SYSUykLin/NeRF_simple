@@ -6,7 +6,6 @@ class nerf_ngp(nn.Module):
     def __init__(self,
                  coordinate_input_dim,
                  direction_input_dim,
-
                  first_depth=1,
                  second_depth=3,
                  hidden_size=64,
@@ -38,9 +37,11 @@ class nerf_ngp(nn.Module):
         # 初始化
         for name, param in self.first_model.named_parameters():
             if 'weight' in name:
-                nn.init.xavier_normal_(param, gain=1.0)
+                nn.init.normal_(param)
+                # nn.init.xavier_normal_(param, gain=1.0)
         for name, param in self.second_model.named_parameters():
             if 'weight' in name:
+                nn.init.normal_(param)
                 nn.init.xavier_normal_(param, gain=1.0)
         
     def forward(self, X_coordinate, Y_coordinate, keepmap):
@@ -184,8 +185,6 @@ class hash_embedding(nn.Module):
         # 归一化x坐标
         # x:[N_rays, N_samples, 3] -> x:[N_rays x N_samples, 3]
         # 返回的result_embeddings:[N_rays, N_samples, hidden_size]
-        N_rays, N_samples, coords_dim = x.shape
-        x = x.reshape(-1, 3)
         x_origin = x.contiguous()
 
         min_bound, max_bound = self.bounding_box[0], self.bounding_box[1]
@@ -217,7 +216,7 @@ class hash_embedding(nn.Module):
             # 注意这里传进去的x_origin要求是原始的坐标，不是归一化之后的坐标
             context_embedding = self.trilinear_interp(x_origin, min_box_coords, max_box_coords, voxel_embedds)
             results_embeddings.append(context_embedding)
-        results_embeddings = torch.cat(results_embeddings, dim=-1).reshape(N_rays, N_samples, -1)
+        results_embeddings = torch.cat(results_embeddings, dim=-1)
 
         # 这个keep_mask不是很重要
         keep_mask = keep_mask.sum(dim=-1)==keep_mask.shape[-1]

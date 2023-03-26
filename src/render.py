@@ -106,10 +106,13 @@ def generate_raw(z_vals, model, rays_d, rays_o, coords_embeddings, direction_emb
     model.train()
     coords_embeddings.train()
     direction_embeddings.train()
+    N_rays, N_samples, coords_dim = coordinates.shape
+    coordinates = coordinates.reshape(-1, 3)
+    viewdirs = viewdirs.reshape(-1, 3)
     coordinates_embed, keep_mask = coords_embeddings(coordinates)
     viewdirs_embed = direction_embeddings(viewdirs)
     raw_outputs = model(coordinates_embed, viewdirs_embed, keep_mask)
-
+    raw_outputs = raw_outputs.reshape(N_rays, N_samples, -1)
     return raw_outputs, viewdirs, coordinates
 
 
@@ -213,10 +216,10 @@ def render_images(render_poses, H, W, K, near, far, N_rays, N_samples,
         renders_images.append(images)
         render_depths.append(depth)
     renders_images = np.stack(renders_images, 0)
-    imageio.mimwrite(os.path.join('C:/Users/15813/Desktop/git_projects/NeRF_simple/dataset/nerf_synthetic/' + dataname, str(epoch) + '_fine_network_rgb_video.mp4'), 
+    imageio.mimwrite(os.path.join('dataset\\nerf_synthetic\\' + dataname + '\\logs', str(epoch) + '_fine_network_rgb_video.mp4'), 
                      tools.to8b(renders_images), fps=30, quality=8)
     render_depths = depth_map_visualization(render_depths)
-    imageio.mimwrite(os.path.join('C:/Users/15813/Desktop/git_projects/NeRF_simple/dataset/nerf_synthetic/' + dataname, str(epoch) + '_fine_network_depth_video.mp4'), 
+    imageio.mimwrite(os.path.join('dataset\\nerf_synthetic\\' + dataname + '\\logs', str(epoch) + '_fine_network_depth_video.mp4'), 
                      tools.to8b(render_depths), fps=30, quality=8)
     
     return renders_images, render_depths
