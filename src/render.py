@@ -87,7 +87,7 @@ def fine_samples(weights, rays_d, z_vals, N_importance, perturb=True, gpu=True):
     return z_vals
     
 
-def generate_raw(z_vals, model, rays_d, rays_o, gpu=True):
+def generate_raw(z_vals, model, rays_d, rays_o, coords_embeddings, direction_embeddings, gpu=True):
     '''
     z_vals: [N_rays, N_samples]
     rays_d: [N_rays, 3]
@@ -104,7 +104,11 @@ def generate_raw(z_vals, model, rays_d, rays_o, gpu=True):
     viewdirs = viewdirs[:, None, :].expand(coordinates.shape)
     # [N_rays, N_samples, 4]
     model.train()
-    raw_outputs = model(coordinates, viewdirs)
+    coords_embeddings.train()
+    direction_embeddings.train()
+    coordinates_embed, keep_mask = coords_embeddings(coordinates)
+    viewdirs_embed = direction_embeddings(viewdirs)
+    raw_outputs = model(coordinates_embed, viewdirs_embed, keep_mask)
 
     return raw_outputs, viewdirs, coordinates
 
@@ -148,9 +152,11 @@ def render_rays(z_vals, rays_d, color, sigma, gpu=True):
 
 
 def render_images(render_poses, H, W, K, near, far, N_rays, N_samples, 
-                  N_importance, coarse_model, fine_model, epoch, gpu=True):
+                  N_importance, coarse_model, fine_model, coords_embeddings, direction_embeddings, epoch, dataname, gpu=True):
     coarse_model.eval()
     fine_model.eval()
+    coords_embeddings.eval()
+    direction_embeddings.eval()
     renders_images = []
     render_depths = []
     for i, c2w in enumerate(tqdm(render_poses, colour='RED', ncols=80)):
@@ -174,7 +180,9 @@ def render_images(render_poses, H, W, K, near, far, N_rays, N_samples,
                 raw, viewdirs, coordinates = generate_raw(z_vals, 
                                                           coarse_model, 
                                                           select_rays_d, 
-                                                          select_rays_o)
+                                                          select_rays_o,
+                                                          coords_embeddings, 
+                                                          direction_embeddings)
                 color = raw[..., :3]
                 sigma = raw[..., -1]
                 rgb_images, depth_images, weights = render_rays(z_vals, select_rays_d, color, sigma, gpu)
@@ -184,7 +192,9 @@ def render_images(render_poses, H, W, K, near, far, N_rays, N_samples,
                 raw_fine, viewdirs_fine, coordinates_fine = generate_raw(z_vals_all, 
                                                                          fine_model, 
                                                                          select_rays_d, 
-                                                                         select_rays_o)
+                                                                         select_rays_o,
+                                                                         coords_embeddings, 
+                                                                         direction_embeddings)
                 color_fine = raw_fine[..., :3]
                 sigma_fine = raw_fine[..., -1]
                 rgb_images_fine, depth_images_fine, weights_fine = render_rays(z_vals_all, select_rays_d, 
@@ -203,10 +213,10 @@ def render_images(render_poses, H, W, K, near, far, N_rays, N_samples,
         renders_images.append(images)
         render_depths.append(depth)
     renders_images = np.stack(renders_images, 0)
-    imageio.mimwrite(os.path.join('C:/Users/15813/Desktop/git_projects/NeRF_simple/dataset/nerf_synthetic/lego', str(epoch) + '_fine_network_rgb_video.mp4'), 
+    imageio.mimwrite(os.path.join('C:/Users/15813/Desktop/git_projects/NeRF_simple/dataset/nerf_synthetic/' + dataname, str(epoch) + '_fine_network_rgb_video.mp4'), 
                      tools.to8b(renders_images), fps=30, quality=8)
     render_depths = depth_map_visualization(render_depths)
-    imageio.mimwrite(os.path.join('C:/Users/15813/Desktop/git_projects/NeRF_simple/dataset/nerf_synthetic/lego', str(epoch) + '_fine_network_depth_video.mp4'), 
+    imageio.mimwrite(os.path.join('C:/Users/15813/Desktop/git_projects/NeRF_simple/dataset/nerf_synthetic/' + dataname, str(epoch) + '_fine_network_depth_video.mp4'), 
                      tools.to8b(render_depths), fps=30, quality=8)
     
     return renders_images, render_depths

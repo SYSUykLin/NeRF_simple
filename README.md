@@ -22,3 +22,10 @@ https://user-images.githubusercontent.com/34080744/227677972-165d7c9d-6fb8-490c-
 
 还是有点模糊，但是设备限制没法跑太多轮次了。
 ![nerf_simple_loss_pnsr](https://user-images.githubusercontent.com/34080744/227678042-040d5c10-3758-4a09-a964-a3043e0d531c.png)
+
+***
+增加了hash编码，instanNGP。
+* 图片改成400x400
+* 用xavier初始化网络
+* 网络变小
+* mesh的提取和上色

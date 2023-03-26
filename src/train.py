@@ -9,9 +9,9 @@ from tqdm import tqdm
 TIMESTAMP = "{0:%Y-%m-%dT%H-%M-%S/}".format(datetime.now())   
 
 
-def train_nerf(datadir, dataconfig, gpu=True):
+def train_nerf(datadir, dataconfig, dataname, gpu=True):
     print(f"use GPU : {gpu}")
-    writer = SummaryWriter('dataset\\nerf_synthetic\\lego\\logs' + str(TIMESTAMP))
+    writer = SummaryWriter('dataset\\nerf_synthetic\\' + dataname + '\\logs' + str(TIMESTAMP))
     datasets, (H, W, focal), render_poses, min_bound, max_bound = tools.read_datasets(datadir, 
                                                                                       dataconfig)
     bounding_boxes = (min_bound, max_bound)
@@ -27,8 +27,8 @@ def train_nerf(datadir, dataconfig, gpu=True):
     test_iter = 5000
     coordinate_L = 10
     direction_L = 4
-    N_rays = 3096
-    rander_rays = 6000
+    N_rays = 1024
+    rander_rays = 4096
     N_samples = 64
     N_importances = 128
     near = 2.
@@ -46,13 +46,13 @@ def train_nerf(datadir, dataconfig, gpu=True):
     #                            coordinate_embeddings, direction_embeddings)
     # fine_model = models.nerf(coord_input_dim, direct_input_dim, 
     #                          coordinate_embeddings, direction_embeddings)
-    coarse_model = models.nerf_ngp(coord_input_dim, direct_input_dim, 
-                                   coordinate_embeddings, direction_embeddings)
-    fine_model = models.nerf_ngp(coord_input_dim, direct_input_dim, 
-                                 coordinate_embeddings, direction_embeddings)
+    coarse_model = models.nerf_ngp(coord_input_dim, direct_input_dim)
+    fine_model = models.nerf_ngp(coord_input_dim, direct_input_dim)
     grad_vars = list(coarse_model.parameters()) + list(fine_model.parameters())
+    embedding_params = list(coordinate_embeddings.parameters())
+    grad_vars = grad_vars + embedding_params
     optimizer = torch.optim.Adam(params=grad_vars, lr=5e-4, betas=(0.9, 0.999))
-    
+
     # 所有的训练数据
     train_images = train_data["images"]
     train_poses = train_data["poses"]
@@ -66,6 +66,8 @@ def train_nerf(datadir, dataconfig, gpu=True):
                      ])
     
     if gpu:
+        coordinate_embeddings = coordinate_embeddings.cuda()
+        direction_embeddings = direction_embeddings.cuda()
         coarse_model = coarse_model.cuda()
         fine_model = fine_model.cuda()
     
@@ -85,7 +87,7 @@ def train_nerf(datadir, dataconfig, gpu=True):
             grid_W, grid_H = torch.meshgrid(torch.arange(W), torch.arange(H), 
                                             indexing="xy")
             grid = torch.stack((grid_H, grid_W), dim=-1)
-            if global_epoch < 3:
+            if epoch < 500:
                 dH = int(H // 2 * 0.6)
                 dW = int(W // 2 * 0.6)
                 grid = torch.stack(
@@ -102,6 +104,7 @@ def train_nerf(datadir, dataconfig, gpu=True):
             select_rays_o = rays_o[select_coords[:, 0], select_coords[:, 1], :]
             targets_image = train_image[select_coords[:, 0], select_coords[:, 1]]
             
+            targets_image = torch.Tensor(targets_image)
             if gpu:
                 targets_image = targets_image.cuda()
                 train_pose = train_pose.cuda()
@@ -109,7 +112,9 @@ def train_nerf(datadir, dataconfig, gpu=True):
             raw, viewdirs, coordinates = render.generate_raw(z_vals, 
                                                              coarse_model, 
                                                              select_rays_d, 
-                                                             select_rays_o)
+                                                             select_rays_o,
+                                                             coordinate_embeddings, 
+                                                             direction_embeddings)
             # viewdirs：归一化后的方向
             color = raw[..., :3]
             sigma = raw[..., -1]
@@ -121,7 +126,9 @@ def train_nerf(datadir, dataconfig, gpu=True):
             raw_fine, viewdirs_fine, coordinates_fine = render.generate_raw(z_vals_all, 
                                                                             fine_model, 
                                                                             select_rays_d, 
-                                                                            select_rays_o)
+                                                                            select_rays_o,
+                                                                            coordinate_embeddings, 
+                                                                            direction_embeddings)
             color_fine = raw_fine[..., :3]
             sigma_fine = raw_fine[..., -1]
             rgb_images_fine, depth_images_fine, weights_fine = render.render_rays(z_vals_all, select_rays_d, 
@@ -153,7 +160,9 @@ def train_nerf(datadir, dataconfig, gpu=True):
         torch.cuda.empty_cache()
         render.render_images(render_poses, H, W, K, near, far, 
                              rander_rays, N_samples, 
-                             N_importances, coarse_model, fine_model, global_epoch * test_iter, gpu)    
+                             N_importances, coarse_model, fine_model, 
+                             coordinate_embeddings, direction_embeddings, 
+                             global_epoch * test_iter, dataname, gpu)    
             
         
     writer.close()

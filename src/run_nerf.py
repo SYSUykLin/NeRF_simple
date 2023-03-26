@@ -15,5 +15,6 @@ if __name__ == '__main__':
     
     train.train_nerf(datadir=datadir,
                      dataconfig=data_config, 
+                     dataname=str(dataset_name[2]),
                      gpu=is_gpu)
     

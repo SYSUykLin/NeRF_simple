@@ -6,8 +6,7 @@ class nerf_ngp(nn.Module):
     def __init__(self,
                  coordinate_input_dim,
                  direction_input_dim,
-                 embeddings_coordi,
-                 embeddings_direct,
+
                  first_depth=1,
                  second_depth=3,
                  hidden_size=64,
@@ -19,8 +18,6 @@ class nerf_ngp(nn.Module):
         self.second_depth = second_depth
         self.hidden_size = hidden_size
         self.output_hidden = output_hidden
-        self.embeddings_coordi = embeddings_coordi
-        self.embeddings_direct = embeddings_direct
         
         first_models = [nn.Linear(self.coordinate_input_dim, self.hidden_size), nn.ReLU(inplace=True)]
         for i in range(self.first_depth - 1):
@@ -37,22 +34,28 @@ class nerf_ngp(nn.Module):
             second_models.append(nn.ReLU(inplace=True))
         second_models.append(nn.Linear(self.hidden_size, 3))
         self.second_model = nn.Sequential(*second_models)
+
+        # 初始化
+        for name, param in self.first_model.named_parameters():
+            if 'weight' in name:
+                nn.init.xavier_normal_(param, gain=1.0)
+        for name, param in self.second_model.named_parameters():
+            if 'weight' in name:
+                nn.init.xavier_normal_(param, gain=1.0)
         
-    def forward(self, X_coordinate, Y_coordinate):
-        X_coordinate, keepmap = self.embeddings_coordi(X_coordinate)
-        Y_coordinate = self.embeddings_direct(Y_coordinate)
+    def forward(self, X_coordinate, Y_coordinate, keepmap):
+        # X_coordinate, keepmap = self.embeddings_coordi(X_coordinate)
+        N_rays, N_samples, dim = X_coordinate.shape
         first_hidden = self.first_model(X_coordinate)
         sigma = first_hidden[..., 0]
         first_hidden = first_hidden[..., 1:]
         second_hidden = torch.cat([first_hidden, Y_coordinate], dim=-1)
         color = self.second_model(second_hidden)
         raw = torch.cat([color, sigma[..., None]], dim=-1)
-
-        N_rays, N_samples, color_sigma = raw.shape
-        raw = raw.reshape(-1, color_sigma)
+        raw = raw.reshape(-1, 4)
         # 盒子外面的密度设置为0
         raw[~keepmap, -1] = 0
-        raw = raw.reshape(N_rays, N_samples, color_sigma)
+        raw = raw.reshape(N_rays, N_samples, -1)
         return raw
 
 
@@ -168,7 +171,7 @@ class hash_embedding(nn.Module):
                                    device='cuda')
         self.b = torch.exp((torch.log(self.max_resolution) -
                             torch.log(self.min_resolution)) /
-                            (self.levels - 1))
+                           (self.levels - 1))
         self.pi = torch.tensor([1, 2654435761, 805459861])
         
         # 这个写法能兼容1.9的torch
@@ -183,19 +186,20 @@ class hash_embedding(nn.Module):
         # 返回的result_embeddings:[N_rays, N_samples, hidden_size]
         N_rays, N_samples, coords_dim = x.shape
         x = x.reshape(-1, 3)
+        x_origin = x.contiguous()
+
         min_bound, max_bound = self.bounding_box[0], self.bounding_box[1]
         # min_bound:[N_rays x N_samples, 3]
         min_bound = min_bound[None, :].expand(x.shape).to(x.device)
         # max_bounc:[N_rays x N_samples, 3]
         max_bound = max_bound[None, :].expand(x.shape).to(x.device)
-        # x:[N_rays x N_samples, 3] 归一化
-        x = (x - min_bound) / (max_bound - min_bound)
-        results_embeddings = []
-
         keep_mask = x==torch.max(torch.min(x, max_bound), min_bound)
         if not torch.all(x <= max_bound) or not torch.all(x >= min_bound):
             # print("ALERT: some points are outside bounding box. Clipping them!")
             x = torch.clamp(x, min=min_bound, max=max_bound)
+        # x:[N_rays x N_samples, 3] 归一化
+        x = (x - min_bound) / (max_bound - min_bound)
+        results_embeddings = []
         for level in range(self.levels):
             # resolution
             Nl = torch.floor(self.min_resolution * (self.b ** level)).to(x.device)
@@ -210,9 +214,12 @@ class hash_embedding(nn.Module):
 
             hash_embedding_indexs = self.hash_code(box_indexs)
             voxel_embedds = self.embeddings[level](hash_embedding_indexs)
-            context_embedding = self.trilinear_interp(x, min_box_coords, max_box_coords, voxel_embedds)
+            # 注意这里传进去的x_origin要求是原始的坐标，不是归一化之后的坐标
+            context_embedding = self.trilinear_interp(x_origin, min_box_coords, max_box_coords, voxel_embedds)
             results_embeddings.append(context_embedding)
         results_embeddings = torch.cat(results_embeddings, dim=-1).reshape(N_rays, N_samples, -1)
+
+        # 这个keep_mask不是很重要
         keep_mask = keep_mask.sum(dim=-1)==keep_mask.shape[-1]
         return results_embeddings, keep_mask
     
@@ -249,7 +256,7 @@ class hash_embedding(nn.Module):
         xor_result = torch.zeros_like(box_indexs)[..., 0]
         for i in range(box_indexs.shape[-1]):
             xor_result ^= box_indexs[..., i] * self.pi[i]
-        return torch.tensor((1 << self.log2T)-1).to(xor_result.device) & xor_result
+        return torch.tensor((1 << self.log2T) - 1).to(xor_result.device) & xor_result
 
     def count_dim(self):
         return self.features_size * self.levels
@@ -340,6 +347,7 @@ class SHEncoder(nn.Module):
                         result[..., 24] = self.C4[8] * (xx * (xx - 3 * yy) - yy * (3 * xx - yy))
 
         return result
+
 
 
 
