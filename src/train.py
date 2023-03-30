@@ -81,7 +81,7 @@ def train_nerf(datadir, dataconfig, dataname, gpu=True):
             train_image = train_images[index_image]
             train_image = train_image[..., :3] * train_image[..., -1:] + (1. - train_image[..., -1:])
             _, Height, Width, channal = train_image.shape
-            train_pose = train_poses[index_image]
+            train_pose = train_poses[index_image][:, :3, :4]
 
             rays_d, rays_o = render.get_rays(H, W, K, train_pose, gpu)
             grid_W, grid_H = torch.meshgrid(torch.arange(W), torch.arange(H), 
@@ -158,10 +158,10 @@ def train_nerf(datadir, dataconfig, dataname, gpu=True):
                               global_step=lr_global_epochs)
             lr_global_epochs += 1
         torch.cuda.empty_cache()
-        torch.save({'coordinate_embeddings': coordinate_embeddings.state_dict()}, 'models\\coordinate_embeddings.pth')
-        torch.save({'direction_embeddings': direction_embeddings.state_dict()}, 'models\\direction_embeddings.pth')
-        torch.save({'coarse_model': coarse_model.state_dict()}, 'models\\coarse_model.pth')
-        torch.save({'fine_model': fine_model.state_dict()}, 'models\\fine_model.pth')
+        torch.save(coordinate_embeddings, 'models\\coordinate_embeddings.pt')
+        torch.save(direction_embeddings, 'models\\direction_embeddings.pt')
+        torch.save(coarse_model, 'models\\coarse_model.pt')
+        torch.save(fine_model, 'models\\fine_model.pt')
        
         render.render_images(render_poses, H, W, K, near, far, 
                              rander_rays, N_samples, 

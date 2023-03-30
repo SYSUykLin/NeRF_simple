@@ -12,7 +12,7 @@ import cv2
 def get_rays(Height, Width, K, c2w, gpu=True):
     # c2w[1, 3, 4]
     c2w = c2w.reshape(-1, c2w.shape[-1])
-    X, Y = torch.meshgrid(torch.arange(Width), torch.arange(Height))
+    X, Y = torch.meshgrid(torch.linspace(0, Width-1, Width), torch.linspace(0, Height-1, Height))
     X = X.t()
     Y = Y.t()
     # rays_d：[H, W, 3]
@@ -165,7 +165,7 @@ def render_images(render_poses, H, W, K, near, far, N_rays, N_samples,
     for i, c2w in enumerate(tqdm(render_poses, colour='RED', ncols=80)):
         # 一下子全部丢去去cuda存不下
         with torch.no_grad():
-            rays_d, rays_o = get_rays(H, W, K, c2w, gpu)
+            rays_d, rays_o = get_rays(H, W, K, c2w[:3,:4], gpu)
             viewdirs = rays_d / torch.norm(rays_d, dim=-1, keepdim=True)
             viewdirs = torch.reshape(viewdirs, [-1, 3]).float()
             sh = H * W
