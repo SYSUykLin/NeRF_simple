@@ -184,6 +184,7 @@ class hash_embedding(nn.Module):
         # 归一化x坐标
         # x:[N_rays, N_samples, 3] -> x:[N_rays x N_samples, 3]
         # 返回的result_embeddings:[N_rays x N_samples, hidden_size]
+        x_origin = x.clone()
 
         min_bound, max_bound = self.bounding_box[0], self.bounding_box[1]
         # min_bound:[N_rays x N_samples, 3]
@@ -216,7 +217,7 @@ class hash_embedding(nn.Module):
             results_embeddings.append(context_embedding)
         results_embeddings = torch.cat(results_embeddings, dim=-1)
         if self.include:
-            results_embeddings = torch.cat([results_embeddings, x], dim=-1)
+            results_embeddings = torch.cat([results_embeddings, x_origin], dim=-1)
 
         # 这个keep_mask不是很重要
         keep_mask = keep_mask.sum(dim=-1)==keep_mask.shape[-1]

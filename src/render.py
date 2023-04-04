@@ -12,7 +12,7 @@ import cv2
 def get_rays(Height, Width, K, c2w, gpu=True):
     # c2w[1, 3, 4]
     c2w = c2w.reshape(-1, c2w.shape[-1])
-    X, Y = torch.meshgrid(torch.linspace(0, Width-1, Width), torch.linspace(0, Height-1, Height))
+    X, Y = torch.meshgrid(torch.linspace(0, Width - 1, Width), torch.linspace(0, Height - 1, Height))
     X = X.t()
     Y = Y.t()
     # rays_d：[H, W, 3]
@@ -34,7 +34,7 @@ def coarse_samples(N_rays, near, far, N_samples,
     device = 'cuda' if gpu else 'cpu'
     t_vals = torch.linspace(0.0, 1.0, steps=N_samples).to(device)
     z_vals = near + t_vals * (far - near)
-    z_vals = z_vals.expand(N_rays, N_samples)
+    z_vals = z_vals.expand(N_rays, N_samples)  
     if perturb:
         mids = 0.5 * (z_vals[..., 1:] + z_vals[..., :-1])
         lower = torch.cat([z_vals[..., :1], mids], -1)
@@ -45,6 +45,7 @@ def coarse_samples(N_rays, near, far, N_samples,
         elif distribution == 'gaussion':
             t_randoms = torch.randn(z_vals.shape).to(device)
         z_vals = lower + t_randoms * (upper - lower)
+
     return z_vals.to(device)
 
 
@@ -58,18 +59,17 @@ def fine_samples(weights, rays_d, z_vals, N_importance, perturb=True, gpu=True):
     weights = weights + 1e-5
     # 计算中点 [N_rays, N_samples-1]
     z_vals = z_vals.to(device)
-    z_vals_mid = 0.5 * (z_vals[..., 1:] - z_vals[..., :-1])
+    z_vals_mid = 0.5 * (z_vals[..., 1:] + z_vals[..., :-1])
     weights = weights[..., 1:-1]
     pdf = weights / torch.sum(weights, dim=-1, keepdim=True)
     cdf = torch.cumsum(pdf, -1)
     # [N_rays, N_samples-1]
     cdf = torch.cat([torch.zeros(cdf.shape[0], 1, device=device), cdf], dim=-1)
     
-    # 均匀分出N_importance个点 [N_importance]
-    u = torch.linspace(0.0, 1.0, N_importance, device=device)
-    u = u[None, ...].expand(z_vals.shape[0], N_importance).contiguous()
+    # 均匀分出N_importance个点 [N_rays, N_importance]
+    u = torch.rand(z_vals.shape[0], N_importance, device=device).contiguous()
     
-    indexs = torch.searchsorted(cdf, u)
+    indexs = torch.searchsorted(cdf, u, right=True)
     lower = torch.max(torch.zeros(indexs.shape).to(device), indexs - 1)
     upper = torch.min((cdf.shape[-1] - 1) * torch.ones_like(indexs).to(device), indexs)
     intervals = torch.stack([lower, upper], dim=-1).clone().detach()
@@ -97,12 +97,12 @@ def generate_raw(z_vals, model, rays_d, rays_o, coords_embeddings, direction_emb
     z_vals = z_vals.to(device)
     rays_d = rays_d.to(device)
     rays_o = rays_o.to(device)
-    coordinates = rays_o[..., None, :] + rays_d[..., None, :] * z_vals[..., 
-                                                                       None]
+    coordinates = rays_o[..., None, :] + rays_d[..., None, :] * z_vals[..., None]
+
     # viewdirs: [N_rays, 3]
     viewdirs = rays_d / torch.norm(rays_d, dim=-1, keepdim=True)
     viewdirs = viewdirs[:, None, :].expand(coordinates.shape)
-    # [N_rays, N_samples, 4]
+    # [N_rays, N_samples, 3]
     model.train()
     coords_embeddings.train()
     direction_embeddings.train()
@@ -137,17 +137,19 @@ def render_rays(z_vals, rays_d, color, sigma, gpu=True):
                                torch.Tensor([inf]).
                                expand(rays_distance.shape[0], 1).to(device)], 
                               dim=-1)
-    # alpha = 1 - exp(-sigma*delta) [N_rays, N_samples]
-    alpha = 1 - torch.exp(-F.relu(sigma) * rays_distance)
+    # alpha = 1 - exp(-sigma*delta) [N_rays, N_samples]，最后一个位置没用
+    alpha = 1.0 - torch.exp(-F.relu(sigma) * rays_distance)
     # 计算Ti = exp(-sum(sigma*delta))
-    T = torch.cumprod(1.0 - alpha + 1e-10, dim=-1) 
-    T = torch.cat([torch.ones(rays_distance.shape[0], 1, 
-                              device=device), T], 
-                              dim=-1)
+    
+    T = torch.cat([torch.ones((alpha.shape[0], 1), device=device), 1. - alpha + 1e-10], -1)
+    T = torch.cumprod(T, -1)
+
     T = T[:, :-1]
+    # weights [N_rays, N_samples]
     weights = alpha * T
-    rgb = torch.sum((weights[..., None] * color), dim=1)
+    rgb = torch.sum((weights[..., None] * torch.sigmoid(color)), dim=1)
     depth = torch.sum((weights[..., None] * z_vals[..., None]), dim=1)
+    # acc_map [N_rays, 1]
     acc_map = torch.sum(weights, -1)
     rgb = rgb + (1. - acc_map[..., None])
 
@@ -165,7 +167,7 @@ def render_images(render_poses, H, W, K, near, far, N_rays, N_samples,
     for i, c2w in enumerate(tqdm(render_poses, colour='RED', ncols=80)):
         # 一下子全部丢去去cuda存不下
         with torch.no_grad():
-            rays_d, rays_o = get_rays(H, W, K, c2w[:3,:4], gpu)
+            rays_d, rays_o = get_rays(H, W, K, c2w[:3, :4], gpu)
             viewdirs = rays_d / torch.norm(rays_d, dim=-1, keepdim=True)
             viewdirs = torch.reshape(viewdirs, [-1, 3]).float()
             sh = H * W
@@ -177,6 +179,7 @@ def render_images(render_poses, H, W, K, near, far, N_rays, N_samples,
             for i in tqdm(range(0, sh, N_rays), ncols=80):
                 select_rays_d = rays_d[i: i + N_rays]
                 select_rays_o = rays_o[i: i + N_rays]
+                select_rays_viewdirs = viewdirs[i: i + N_rays]
                 # 有可能不能整除
                 Num_rays = select_rays_d.shape[0]
                 z_vals = coarse_samples(Num_rays, near, far, N_samples, gpu=gpu)
@@ -191,7 +194,10 @@ def render_images(render_poses, H, W, K, near, far, N_rays, N_samples,
                 rgb_images, depth_images, weights = render_rays(z_vals, select_rays_d, color, sigma, gpu)
                 z_vals_fine_sample = fine_samples(weights, select_rays_d, z_vals, N_importance, gpu)
                 z_vals_fine_sample = z_vals_fine_sample.detach()
+                
                 z_vals_all, _ = torch.sort(torch.cat([z_vals, z_vals_fine_sample], -1), -1)
+
+                z_vals_all = z_vals_fine_sample
                 raw_fine, viewdirs_fine, coordinates_fine = generate_raw(z_vals_all, 
                                                                          fine_model, 
                                                                          select_rays_d, 

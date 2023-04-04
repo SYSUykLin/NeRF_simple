@@ -7,6 +7,8 @@ import math
 import render
 from torch.optim.optimizer import Optimizer
 import cv2
+import matplotlib
+import matplotlib.pyplot as plt
 
 # 平移
 trans_t = lambda t: torch.Tensor([
@@ -88,7 +90,7 @@ def read_datasets(datadir, dataconfig):
         return_datasets[s] = {"images": images, "poses": poses}
     camera_angle_X = all_datasets["train"]["camera_angle_x"]
     H, W = images.shape[1:-1]
-    focal = (W * 0.5) / np.tan(camera_angle_X * 0.5)
+    focal = .5 * W / np.tan(.5 * camera_angle_X) 
     render_poses = torch.stack([pose_spherical(angle, -30.0, 4.0) 
                                 for angle in torch.linspace(-180, 180, 40 + 1)[: -1]], 0)
     
@@ -145,3 +147,29 @@ def mse2psnr(X, gpu):
 
 to8b = lambda x: (255 * np.clip(x, 0, 1)).astype(np.uint8)
 
+near = 2.0
+far = 6.0
+
+def g(x):
+    return 1. / x
+
+
+
+def s_space(t):
+    return (g(t) - g(near)) / (g(far) - g(near))
+
+# Mip-NeRF 360采样
+if __name__ == '__main__':
+    s = torch.linspace(0.0, 1.0, 64)
+    s_n = (s * far + (1 - s) * near)
+    Y_n = torch.ones_like(s_n)
+    t = 1.0 / (s * g(far) + (1 - s) * g(near))
+    Y = torch.ones_like(s_n) * 1.2
+
+    plt.figure(figsize=(10, 10), dpi=70)
+    import os
+    os.environ["KMP_DUPLICATE_LIB_OK"]= "TRUE"
+    plt.scatter(s_n, Y_n, s=50)
+    plt.scatter(t, Y, s=50)
+    plt.show()
+    

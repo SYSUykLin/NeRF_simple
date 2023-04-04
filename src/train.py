@@ -3,6 +3,7 @@ import models
 import torch
 import random
 import render
+import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 from datetime import datetime
 from tqdm import tqdm
@@ -81,28 +82,27 @@ def train_nerf(datadir, dataconfig, dataname, gpu=True):
             train_image = train_images[index_image]
             train_image = train_image[..., :3] * train_image[..., -1:] + (1. - train_image[..., -1:])
             _, Height, Width, channal = train_image.shape
-            train_pose = train_poses[index_image][:, :3, :4]
+            train_pose = train_poses[index_image, :3, :4]
 
             rays_d, rays_o = render.get_rays(H, W, K, train_pose, gpu)
-            grid_W, grid_H = torch.meshgrid(torch.arange(W), torch.arange(H), 
-                                            indexing="xy")
-            grid = torch.stack((grid_H, grid_W), dim=-1)
+            grid_W, grid_H = torch.meshgrid(torch.linspace(0, Width - 1, Width), torch.linspace(0, Height - 1, Height))
+            grid = torch.stack((grid_H.t(), grid_W.t()), dim=-1).long()  
             if epoch < 500:
-                dH = int(H // 2 * 0.6)
-                dW = int(W // 2 * 0.6)
-                grid = torch.stack(
-                                   torch.meshgrid(
-                                                  torch.linspace(H // 2 - dH, H // 2 + dH - 1, 2 * dH), 
+                dH = int(H // 2 * 0.5)
+                dW = int(W // 2 * 0.5)
+                grid = torch.stack(torch.meshgrid(torch.linspace(H // 2 - dH, H // 2 + dH - 1, 2 * dH), 
                                                   torch.linspace(W // 2 - dW, W // 2 + dW - 1, 2 * dW)
-                                                 ), -1).long()            
+                                                  ), -1).long()    
             grid = grid.reshape((-1, 2))
-            select_indexs = random.sample(range(grid.shape[0]), N_rays)
+
+            select_indexs = np.random.choice(grid.shape[0], size=[N_rays], replace=False)
+
             select_coords = grid[select_indexs]
             
             train_image = train_image.reshape(Height, Width, channal)
             select_rays_d = rays_d[select_coords[:, 0], select_coords[:, 1], :]      
             select_rays_o = rays_o[select_coords[:, 0], select_coords[:, 1], :]
-            targets_image = train_image[select_coords[:, 0], select_coords[:, 1]]
+            targets_image = train_image[select_coords[:, 0], select_coords[:, 1], :]
             
             targets_image = torch.Tensor(targets_image)
             if gpu:
@@ -120,7 +120,7 @@ def train_nerf(datadir, dataconfig, dataname, gpu=True):
             sigma = raw[..., -1]
             rgb_images, depth_images, weights = render.render_rays(z_vals, select_rays_d, color, sigma, gpu)
             z_vals_fine_sample = render.fine_samples(weights, select_rays_d, z_vals, N_importances, gpu=True)
-            z_vals_fine_sample = z_vals_fine_sample.detach() 
+            z_vals_fine_sample = z_vals_fine_sample.detach()
             z_vals_all, _ = torch.sort(torch.cat([z_vals, z_vals_fine_sample], -1), -1)
 
             raw_fine, viewdirs_fine, coordinates_fine = render.generate_raw(z_vals_all, 
@@ -136,9 +136,13 @@ def train_nerf(datadir, dataconfig, dataname, gpu=True):
             
             optimizer.zero_grad()
             loss_mse = torch.nn.MSELoss(reduction='mean')
-            loss_images = loss_mse(rgb_images_fine, targets_image)
-            psnr = tools.mse2psnr(loss_images, gpu)
-            loss_images.backward()
+            loss_fine_images = loss_mse(rgb_images_fine, targets_image)
+            loss_coarse_images = loss_mse(rgb_images, targets_image)
+
+            loss = loss_fine_images + loss_coarse_images
+
+            psnr = tools.mse2psnr(loss_fine_images, gpu)
+            loss.backward()
             optimizer.step()
 
             # 原生代码里面的步长优化
@@ -150,9 +154,9 @@ def train_nerf(datadir, dataconfig, dataname, gpu=True):
             for param_group in optimizer.param_groups:
                 param_group['lr'] = new_lrate
 
-            if epoch % 5 == 0:
-                tqdm.write(f"loss : {loss_images}, psnr : {psnr.item()}")
-            writer.add_scalar("Loss", loss_images, 
+            if epoch % 50 == 0:
+                tqdm.write(f"loss : {loss}, psnr : {psnr.item()}")
+            writer.add_scalar("Loss", loss, 
                               global_step=lr_global_epochs)
             writer.add_scalar("PSNR", psnr.item(), 
                               global_step=lr_global_epochs)

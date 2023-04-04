@@ -60,8 +60,8 @@ def tights_bounds(bounding_box, N=128, N_rays=1024,
         B = xyz_.shape[0]
         out_chunks = []
         for i in tqdm(range(0, B, N_rays)):
-            xyz_embedded, keep_mask = coordinate_embeddings(xyz_[i:i+N_rays]) # (N, embed_xyz_channels)
-            dir_embedded = direction_embeddings(dir_[i:i+N_rays]) # (N, embed_dir_channels)
+            xyz_embedded, keep_mask = coordinate_embeddings(xyz_[i: i + N_rays]) # (N, embed_xyz_channels)
+            dir_embedded = direction_embeddings(dir_[i: i + N_rays]) # (N, embed_dir_channels)
             out_chunks += [fine_model(xyz_embedded, dir_embedded, keep_mask)]
         rgbsigma = torch.cat(out_chunks, 0)
 
