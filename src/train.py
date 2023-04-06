@@ -8,12 +8,14 @@ from torch.utils.tensorboard import SummaryWriter
 from datetime import datetime
 from tqdm import tqdm
 import os
+
 TIMESTAMP = "{0:%Y-%m-%dT%H-%M-%S/}".format(datetime.now())   
 
 
 def train_nerf(datadir, dataconfig, dataname, gpu=True, embedding="ngp"):
     print(f"use GPU : {gpu}")
     print(f"Embedding : {embedding}")
+    print(f"dataset : {dataname}")
     log_dir = os.path.join('dataset', 'nerf_synthetic', dataname, 'logs' + str(TIMESTAMP))
     writer = SummaryWriter(log_dir)
     datasets, (H, W, focal), render_poses, min_bound, max_bound = tools.read_datasets(datadir, 
@@ -43,7 +45,7 @@ def train_nerf(datadir, dataconfig, dataname, gpu=True, embedding="ngp"):
     # test_data = datasets['test']
     
     if embedding == "ngp":
-        coordinate_embeddings = models.hash_embedding(bounding_boxes)
+        coordinate_embeddings = models.hash_embedding(bounding_boxes, include=True)
     else:
         coordinate_embeddings = models.fourier_embedding(L=10)
     direction_embeddings = models.SHEncoder()
@@ -93,7 +95,8 @@ def train_nerf(datadir, dataconfig, dataname, gpu=True, embedding="ngp"):
             rays_d, rays_o = render.get_rays(H, W, K, train_pose, gpu)
             grid_W, grid_H = torch.meshgrid(torch.linspace(0, Width - 1, Width), torch.linspace(0, Height - 1, Height))
             grid = torch.stack((grid_H.t(), grid_W.t()), dim=-1).long()  
-            if epoch < 500:
+            if epoch < 800 and global_epoch < 1:
+                print("train with center...")
                 dH = int(H // 2 * 0.5)
                 dW = int(W // 2 * 0.5)
                 grid = torch.stack(torch.meshgrid(torch.linspace(H // 2 - dH, H // 2 + dH - 1, 2 * dH), 

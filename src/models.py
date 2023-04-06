@@ -187,6 +187,7 @@ class hash_embedding(nn.Module):
         min_bound = min_bound[None, :].expand(x.shape).to(x.device)
         # max_bounc:[N_rays x N_samples, 3]
         max_bound = max_bound[None, :].expand(x.shape).to(x.device)
+
         keep_mask = x==torch.max(torch.min(x, max_bound), min_bound)
         if not torch.all(x <= max_bound) or not torch.all(x >= min_bound):
             # print("ALERT: some points are outside bounding box. Clipping them!")
@@ -209,7 +210,7 @@ class hash_embedding(nn.Module):
             hash_embedding_indexs = self.hash_code(box_indexs)
             voxel_embedds = self.embeddings[level](hash_embedding_indexs)
             # 注意这里传进去的x_origin要求是原始的坐标，不是归一化之后的坐标
-            context_embedding = self.trilinear_interp(x, min_box_coords, max_box_coords, voxel_embedds)
+            context_embedding = self.trilinear_interp(x_origin, min_box_coords, max_box_coords, voxel_embedds)
             results_embeddings.append(context_embedding)
         results_embeddings = torch.cat(results_embeddings, dim=-1)
         if self.include:
