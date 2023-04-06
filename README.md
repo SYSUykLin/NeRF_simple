@@ -28,5 +28,8 @@ https://user-images.githubusercontent.com/34080744/227677972-165d7c9d-6fb8-490c-
 * 图片改成400x400
 * 用xavier初始化网络
 * 网络变小
-* mesh的提取
+* mesh的提取zx
 提取mesh的效果不是很好，这个代码应该是有点问题的，但是目前还不知道问题出在哪里。
+
+### 增加InstantNGP编码
+效果不好，应该是这个编码在哪里出现了Bug。
