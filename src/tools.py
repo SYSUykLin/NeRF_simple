@@ -10,6 +10,9 @@ import cv2
 import matplotlib
 import matplotlib.pyplot as plt
 
+# 兼容低版本的Pytorch
+torch.pi = math.pi
+
 # 平移
 trans_t = lambda t: torch.Tensor([
     [1, 0, 0, 0],
@@ -126,7 +129,7 @@ def get_bounding_box(frames, H, W, focal, near, far):
     max_bound = [-math.inf, -math.inf, -math.inf]
     for frame in frames:
         pose = torch.Tensor(frame['transform_matrix'])
-        rays_d, rays_o = render.get_rays(H, W, focal, pose)
+        rays_d, rays_o = render.get_rays(H, W, focal, pose[:3, :4])
         rays_d = rays_d / torch.norm(rays_d, dim=-1, keepdim=True)
         rays_o = rays_o.reshape(-1, 3)
         rays_d = rays_d.reshape(-1, 3)

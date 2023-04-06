@@ -75,8 +75,8 @@ def tights_bounds(bounding_box, N=128, N_rays=1024,
     mesh = trimesh.Trimesh(vertices / N, triangles)
     mesh.show()
 
-datadir = "D:\\NeRF\\NeRF_project\\dataset\\nerf_synthetic\\lego"
-data_config = 'dataset\\lego.txt'
+datadir = os.path.join('.', 'dataset', 'nerf_synthetic', 'lego')
+data_config = 'dataset/lego.txt'
 return_datasets, (H, W, focal), render_poses, min_bound, max_bound = tools.read_datasets(datadir, data_config)
-models_dir = "D:\\NeRF\\NeRF_project\\models"
+models_dir = "NeRF_projects/NeRF/NeRF_simple/models"
 tights_bounds((min_bound, max_bound), models_dir=models_dir)

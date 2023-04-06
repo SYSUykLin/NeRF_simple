@@ -37,7 +37,6 @@ def train_nerf(datadir, dataconfig, dataname, gpu=True, embedding="ngp"):
     N_importances = 128
     near = 2.
     far = 6.
-    learning_rate = 5e-4
     train_data = datasets['train']
     # val_data = datasets['validate']
     # test_data = datasets['test']
@@ -58,7 +57,7 @@ def train_nerf(datadir, dataconfig, dataname, gpu=True, embedding="ngp"):
     grad_vars = list(coarse_model.parameters()) + list(fine_model.parameters())
     embedding_params = list(coordinate_embeddings.parameters())
     grad_vars = grad_vars + embedding_params
-    optimizer = torch.optim.Adam(params=grad_vars, lr=learning_rate, betas=(0.9, 0.999))
+    optimizer = torch.optim.Adam(params=grad_vars, lr=5e-4, betas=(0.9, 0.999))
 
     # 所有的训练数据
     train_images = train_data["images"]
@@ -129,6 +128,7 @@ def train_nerf(datadir, dataconfig, dataname, gpu=True, embedding="ngp"):
             z_vals_fine_sample = render.fine_samples(weights, select_rays_d, z_vals, N_importances, gpu=True)
             z_vals_fine_sample = z_vals_fine_sample.detach()
             z_vals_all, _ = torch.sort(torch.cat([z_vals, z_vals_fine_sample], -1), -1)
+
             raw_fine, viewdirs_fine, coordinates_fine = render.generate_raw(z_vals_all, 
                                                                             fine_model, 
                                                                             select_rays_d, 

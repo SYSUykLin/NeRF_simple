@@ -42,7 +42,7 @@ class nerf_ngp(nn.Module):
         for name, param in self.second_model.named_parameters():
             if 'weight' in name:
                 nn.init.normal_(param)
-                nn.init.xavier_normal_(param, gain=1.0)
+                # nn.init.xavier_normal_(param, gain=1.0)
         
     def forward(self, X_coordinate, Y_coordinate, keepmap):
         # X_coordinate, keepmap = self.embeddings_coordi(X_coordinate)
@@ -62,8 +62,6 @@ class nerf(nn.Module):
     def __init__(self,
                  coordinate_input_dim,
                  direction_input_dim,
-                 embeddings_coordi,
-                 embeddings_direct,
                  first_depth=4,
                  second_depth=4,
                  hidden_size=64,
@@ -75,26 +73,26 @@ class nerf(nn.Module):
         self.second_depth = second_depth
         self.hidden_size = hidden_size
         self.output_hidden = output_hidden
-        self.embeddings_coordi = embeddings_coordi
-        self.embeddings_direct = embeddings_direct
-
-        self.first_model = nn.Sequential(nn.Linear(self.coordinate_input_dim, 
+        self.first_model = [nn.Linear(self.coordinate_input_dim, 
                                                    self.hidden_size), 
-                                         nn.ReLU(inplace=True))
+                                         nn.ReLU(inplace=True)]
         for i in range(self.first_depth - 1):
             self.first_model.append(nn.Linear(self.hidden_size, 
                                               self.hidden_size)) 
             # 这个得加，变成替换操作，要不然内存太大了
             self.first_model.append(nn.ReLU(inplace=True))
+
+        self.first_model = nn.Sequential(*self.first_model)
         
-        self.second_model = nn.Sequential(nn.Linear(self.hidden_size + 
+        self.second_model = [nn.Linear(self.hidden_size + 
                                                     self.coordinate_input_dim, 
                                                     self.hidden_size), 
-                                          nn.ReLU(inplace=True))
+                                          nn.ReLU(inplace=True)]
         for i in range(self.second_depth - 1):
             self.second_model.append(nn.Linear(self.hidden_size, 
                                                self.hidden_size))
             self.second_model.append(nn.ReLU(inplace=True))
+        self.second_model = nn.Sequential(*self.second_model)
         
         self.sigma_model = nn.Linear(self.hidden_size, 1)
         self.feature_model = nn.Linear(self.hidden_size, self.hidden_size)
@@ -105,8 +103,6 @@ class nerf(nn.Module):
         self.relu = nn.ReLU(inplace=True)
     
     def forward(self, X_coordinate, Y_coordinate):
-        X_coordinate = self.embeddings_coordi(X_coordinate)
-        Y_coordinate = self.embeddings_direct(Y_coordinate)
         first_hidden = self.first_model(X_coordinate)
         first_hidden = torch.cat([first_hidden, X_coordinate], dim=-1)
         second_hidden = self.second_model(first_hidden)
@@ -120,7 +116,7 @@ class nerf(nn.Module):
         return raw
 
 
-class fourier_embedding(nn.Module):
+class fourier_embedding(nn.Module):   
     def __init__(self, L, include_X=True):
         super(fourier_embedding, self).__init__()
         self.L = L

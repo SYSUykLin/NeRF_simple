@@ -149,7 +149,6 @@ def render_rays(z_vals, rays_d, color, sigma, gpu=True):
     T = T[:, :-1]
     # weights [N_rays, N_samples]
     weights = alpha * T
-
     rgb = torch.sum((weights[..., None] * torch.sigmoid(color)), dim=1)
     depth = torch.sum((weights[..., None] * z_vals[..., None]), dim=1)
     # acc_map [N_rays, 1]
@@ -191,7 +190,7 @@ def render_images(render_poses, H, W, K, near, far, N_rays, N_samples,
                                                           select_rays_d, 
                                                           select_rays_o,
                                                           coords_embeddings, 
-                                                          direction_embeddings,
+                                                          direction_embedding,
                                                           embedding)
                 color = raw[..., :3]
                 sigma = raw[..., -1]
@@ -207,8 +206,7 @@ def render_images(render_poses, H, W, K, near, far, N_rays, N_samples,
                                                                          select_rays_d, 
                                                                          select_rays_o,
                                                                          coords_embeddings, 
-                                                                         direction_embeddings,
-                                                                         embedding)
+                                                                         direction_embeddings)
                 color_fine = raw_fine[..., :3]
                 sigma_fine = raw_fine[..., -1]
                 rgb_images_fine, depth_images_fine, weights_fine = render_rays(z_vals_all, select_rays_d, 
