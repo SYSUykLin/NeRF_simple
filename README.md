@@ -33,3 +33,21 @@ https://user-images.githubusercontent.com/34080744/227677972-165d7c9d-6fb8-490c-
 
 ### 增加InstantNGP编码
 效果不好，应该是这个编码在哪里出现了Bug。
+
+* Fourier特征的效果：
+
+
+https://user-images.githubusercontent.com/34080744/230388123-69b81c2d-ec66-4bcb-91eb-84ed225cc6ed.mp4
+
+
+
+https://user-images.githubusercontent.com/34080744/230388164-e77dcf0c-5f8e-47f2-acef-aeea040140cf.mp4
+
+* Fourier特征提取Mesh的效果：
+![image](https://user-images.githubusercontent.com/34080744/230388736-b435c81a-8d9f-4467-ab32-654c44111d6a.png)
+* NGP的效果：
+
+
+https://user-images.githubusercontent.com/34080744/230388839-36177a9e-82c2-493f-a827-c63f19718cb7.mp4
+
+
