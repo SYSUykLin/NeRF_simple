@@ -31,15 +31,14 @@ def find_min_max_xyz(bounding_box):
         z_min = min_bound[2]
     if z_max < max_bound[2]:
         z_max = max_bound[2]
-    return x_min - 1, x_max + 1, y_min - 1, y_max + 1, z_min - 1, z_max + 1
+    return x_min + 1, x_max - 1, y_min, y_max, z_min + 2, z_max
     
 
 def tights_bounds(bounding_box, N=128, N_rays=1024, 
                   sigma_threshold=20, 
-                  models_dir="D:\\NeRF\\NeRF_project\\models", device='cuda'):
+                  models_dir="D:\\NeRF\\NeRF_project\\models", device='cuda', embedding='fourier'):
     
     xmin, xmax, ymin, ymax, zmin, zmax = find_min_max_xyz(bounding_box)
-    sigma_threshold = 20.0
 
     x = np.linspace(xmin, xmax, N)
     y = np.linspace(ymin, ymax, N)
@@ -49,20 +48,26 @@ def tights_bounds(bounding_box, N=128, N_rays=1024,
     dir_ = torch.zeros_like(xyz_).cuda()
     print('Predicting occupancy ...')
     
-    coords_embeddings_dir = models_dir + "\\coordinate_embeddings.pt"
+    coords_embeddings_dir = models_dir + "/coordinate_embeddings.pt"
     coordinate_embeddings = torch.load(coords_embeddings_dir).to(device)
-    direction_embeddings_dir = models_dir + "\\direction_embeddings.pt"
+    direction_embeddings_dir = models_dir + "/direction_embeddings.pt"
     direction_embeddings = torch.load(direction_embeddings_dir).to(device)
     fine_model = models.nerf_ngp(coordinate_embeddings.count_dim(), direction_embeddings.count_dim())
-    fine_model_dir = models_dir + "\\fine_model.pt"
+    fine_model_dir = models_dir + "/fine_model.pt"
     fine_model = torch.load(fine_model_dir).to(device)
     with torch.no_grad():
         B = xyz_.shape[0]
         out_chunks = []
         for i in tqdm(range(0, B, N_rays)):
-            xyz_embedded, keep_mask = coordinate_embeddings(xyz_[i: i + N_rays]) # (N, embed_xyz_channels)
+            if embedding == 'fourier':
+                xyz_embedded = coordinate_embeddings(xyz_[i: i + N_rays])
+            else:
+                xyz_embedded, keep_mask = coordinate_embeddings(xyz_[i: i + N_rays]) # (N, embed_xyz_channels)
             dir_embedded = direction_embeddings(dir_[i: i + N_rays]) # (N, embed_dir_channels)
-            out_chunks += [fine_model(xyz_embedded, dir_embedded, keep_mask)]
+            if embedding == 'fourier':
+                out_chunks += [fine_model(xyz_embedded, dir_embedded)]
+            else:
+                out_chunks += [fine_model(xyz_embedded, dir_embedded, keep_mask)]
         rgbsigma = torch.cat(out_chunks, 0)
 
     sigma = rgbsigma[:, -1].cpu().numpy()
@@ -70,13 +75,11 @@ def tights_bounds(bounding_box, N=128, N_rays=1024,
 
     print('Extracting  Mesh ...')
     vertices, triangles = mcubes.marching_cubes(sigma, sigma_threshold)
-
-    
     mesh = trimesh.Trimesh(vertices / N, triangles)
     mesh.show()
 
 datadir = os.path.join('.', 'dataset', 'nerf_synthetic', 'lego')
 data_config = 'dataset/lego.txt'
 return_datasets, (H, W, focal), render_poses, min_bound, max_bound = tools.read_datasets(datadir, data_config)
-models_dir = "NeRF_projects/NeRF/NeRF_simple/models"
-tights_bounds((min_bound, max_bound), models_dir=models_dir)
+models_dir = "models"
+tights_bounds((min_bound, max_bound), N=400, N_rays=5120, sigma_threshold=25.0, models_dir=models_dir, embedding='fourier')
